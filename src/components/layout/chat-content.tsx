@@ -93,9 +93,9 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
           </h1>
         </header>
 
-        {/* Messages Area */}
-        <div className="flex-1 overflow-hidden p-4">
-            <ScrollArea className="h-full">
+        {/* Messages Area - This now grows */}
+        <div className="flex-1 overflow-hidden">
+            <ScrollArea className="h-full p-4">
                 <div className="space-y-4 pr-4">
                 {messages[activeChannel as keyof typeof messages].map(msg => (
                     <div key={msg.id} className="flex items-start gap-3">
@@ -119,8 +119,8 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         </div>
 
 
-        {/* Message Input */}
-        <div className="p-4 border-t border-border mt-auto">
+        {/* Message Input - This is pushed to the bottom */}
+        <div className="p-4 border-t border-border mt-auto flex-shrink-0">
           <form onSubmit={handleSendMessage} className="flex items-center gap-2">
             <Input
               value={newMessage}
