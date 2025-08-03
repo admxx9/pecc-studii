@@ -7,7 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Hash, Send, UserCircle, MessageSquareReply, Smile, MoreHorizontal, Loader2, X, Trash2, Copy as CopyIcon } from 'lucide-react';
+import { Hash, Send, UserCircle, MessageSquareReply, Smile, MoreHorizontal, Loader2, X, Trash2, Copy as CopyIcon, Settings, Plus, GripVertical } from 'lucide-react';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,17 +26,23 @@ import {
 import { cn } from '@/lib/utils';
 import type { UserProfile } from '@/components/page/home-client-page';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, Timestamp, doc, deleteDoc, updateDoc, arrayUnion, arrayRemove, getDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, Timestamp, doc, deleteDoc, updateDoc, arrayUnion, arrayRemove, getDoc, writeBatch, where, getDocs } from 'firebase/firestore';
 import { useToast } from "@/hooks/use-toast";
 
 
-// Mock data for channels - can be moved to Firestore later
-const channels = [
-  { id: '1', name: 'geral' },
-  { id: '2', name: 'dúvidas' },
-  { id: '3', name: 'projetos' },
-  { id: '4', name: 'off-topic' },
-];
+// --- Types ---
+interface ChatCategory {
+    id: string;
+    name: string;
+    order: number;
+    createdAt: Timestamp;
+}
+
+interface ChatChannel {
+    id: string;
+    name: string;
+    categoryId: string;
+}
 
 interface ReplyInfo {
   messageId: string;
@@ -62,21 +71,71 @@ const EMOJI_LIST = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '�
 
 
 export default function ChatContent({ userProfile }: ChatContentProps) {
-  const [activeChannel, setActiveChannel] = useState('1');
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [isLoadingMessages, setIsLoadingMessages] = useState(true);
-  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const { toast } = useToast();
+    const [categories, setCategories] = useState<ChatCategory[]>([]);
+    const [channels, setChannels] = useState<ChatChannel[]>([]);
+    const [activeChannel, setActiveChannel] = useState<ChatChannel | null>(null);
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [newMessage, setNewMessage] = useState('');
+    const [isLoading, setIsLoading] = useState(true);
+    const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+    const scrollAreaRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+    const { toast } = useToast();
+
+    // State for modals
+    const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false);
+    const [isChannelModalOpen, setIsChannelModalOpen] = useState(false);
+    const [editingChannel, setEditingChannel] = useState<{ categoryId: string, channel?: ChatChannel } | null>(null);
+    const [channelName, setChannelName] = useState('');
+
+
+    // --- Data Fetching ---
+    useEffect(() => {
+        if (!db) return;
+        setIsLoading(true);
+
+        const fetchSidebarData = async () => {
+            const categoriesQuery = query(collection(db, 'chatCategories'), orderBy('order', 'asc'));
+            const channelsQuery = query(collection(db, 'chatChannels'), orderBy('createdAt', 'asc'));
+
+            try {
+                const [categoriesSnapshot, channelsSnapshot] = await Promise.all([
+                    getDocs(categoriesQuery),
+                    getDocs(channelsQuery)
+                ]);
+
+                const fetchedCategories = categoriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatCategory[];
+                const fetchedChannels = channelsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatChannel[];
+
+                setCategories(fetchedCategories);
+                setChannels(fetchedChannels);
+
+                if (fetchedChannels.length > 0 && !activeChannel) {
+                    setActiveChannel(fetchedChannels[0]);
+                }
+
+            } catch (error) {
+                console.error("Error fetching sidebar data:", error);
+                toast({ title: "Erro", description: "Não foi possível carregar os canais.", variant: "destructive" });
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchSidebarData();
+
+        // Consider adding snapshot listeners here for real-time category/channel updates if needed
+    }, [toast, activeChannel]);
+
 
   // Firestore listener for messages
   useEffect(() => {
-    if (!db || !activeChannel) return;
-    setIsLoadingMessages(true);
+    if (!db || !activeChannel) {
+        setMessages([]);
+        return;
+    };
 
-    const messagesCol = collection(db, 'chatChannels', activeChannel, 'messages');
+    const messagesCol = collection(db, 'chatChannels', activeChannel.id, 'messages');
     const q = query(messagesCol, orderBy('createdAt', 'asc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -85,23 +144,21 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         ...doc.data()
       })) as ChatMessage[];
       setMessages(fetchedMessages);
-      setIsLoadingMessages(false);
     }, (error) => {
       console.error("Error fetching chat messages:", error);
-      setIsLoadingMessages(false);
-      // Optionally show a toast error
+      toast({ title: "Erro", description: "Não foi possível carregar as mensagens.", variant: "destructive"});
     });
 
-    // Cleanup listener on component unmount or when channel changes
     return () => unsubscribe();
-  }, [activeChannel]);
+  }, [activeChannel, toast]);
 
 
+  // --- Event Handlers ---
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newMessage.trim() === '' || !userProfile || !db) return;
+    if (newMessage.trim() === '' || !userProfile || !db || !activeChannel) return;
 
-    const messagesCol = collection(db, 'chatChannels', activeChannel, 'messages');
+    const messagesCol = collection(db, 'chatChannels', activeChannel.id, 'messages');
 
     try {
       await addDoc(messagesCol, {
@@ -117,110 +174,106 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
           text: replyingTo.text,
           authorName: replyingTo.user.name,
         } : null,
-        reactions: {}, // Initialize with empty reactions
+        reactions: {},
       });
       setNewMessage('');
-      setReplyingTo(null); // Clear reply state after sending
+      setReplyingTo(null);
     } catch (error) {
       console.error("Error sending message:", error);
-      // Optionally show a toast error
+      toast({ title: "Erro", description: "Não foi possível enviar a mensagem.", variant: "destructive" });
     }
   };
 
-  const handleReplyClick = (message: ChatMessage) => {
-    setReplyingTo(message);
-    inputRef.current?.focus();
-  };
+    const handleChannelClick = (channel: ChatChannel) => {
+        setActiveChannel(channel);
+    };
 
-  const cancelReply = () => {
-    setReplyingTo(null);
-  };
+    const handleReplyClick = (message: ChatMessage) => {
+        setReplyingTo(message);
+        inputRef.current?.focus();
+    };
 
-  const handleDeleteMessage = async (messageId: string) => {
-    if (!db) return;
-    
-    const messageToDelete = messages.find(m => m.id === messageId);
-    if (!messageToDelete) return;
+    const cancelReply = () => setReplyingTo(null);
 
-    // Permission Check
-    const isOwner = userProfile?.uid === messageToDelete.user.uid;
-    const isAdmin = userProfile?.isAdmin === true;
+    const handleDeleteMessage = async (messageId: string) => {
+        if (!db || !activeChannel) return;
+        const isOwner = messages.find(m => m.id === messageId)?.user.uid === userProfile?.uid;
+        if (!isOwner && !userProfile?.isAdmin) {
+            toast({ title: "Acesso Negado", description: "Você não tem permissão para excluir esta mensagem.", variant: "destructive" });
+            return;
+        }
+        const messageRef = doc(db, 'chatChannels', activeChannel.id, 'messages', messageId);
+        await deleteDoc(messageRef);
+        toast({ title: "Mensagem Excluída", variant: 'default' });
+    };
 
-    if (!isOwner && !isAdmin) {
-         toast({
-            title: "Acesso Negado",
-            description: "Você não tem permissão para excluir esta mensagem.",
-            variant: "destructive",
-        });
-        return;
-    }
-
-    const messageRef = doc(db, 'chatChannels', activeChannel, 'messages', messageId);
-    try {
-      await deleteDoc(messageRef);
-      toast({
-        title: "Mensagem Excluída",
-        description: "A mensagem foi removida do chat.",
-        variant: 'default',
-      });
-    } catch (error) {
-      console.error("Error deleting message:", error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível excluir a mensagem.",
-        variant: "destructive",
-      });
-    }
-  };
-
-   const handleCopyText = (text: string) => {
-        navigator.clipboard.writeText(text).then(() => {
-            toast({ title: "Texto copiado!" });
-        }).catch(err => {
-            console.error('Failed to copy text: ', err);
-            toast({ title: "Erro", description: "Não foi possível copiar o texto.", variant: "destructive"});
-        });
+    const handleCopyText = (text: string) => {
+        navigator.clipboard.writeText(text).then(() => toast({ title: "Texto copiado!" }));
     };
 
     const handleReaction = async (message: ChatMessage, emoji: string) => {
-      if (!userProfile || !db) return;
-  
-      const messageRef = doc(db, 'chatChannels', activeChannel, 'messages', message.id);
-      const currentReactions = message.reactions || {};
-      const usersWhoReacted = currentReactions[emoji] || [];
-      const userHasReacted = usersWhoReacted.includes(userProfile.uid);
-  
-      const fieldPath = `reactions.${emoji}`;
-  
-      try {
-        if (userHasReacted) {
-          // User has reacted, so remove their reaction
-          await updateDoc(messageRef, {
-            [fieldPath]: arrayRemove(userProfile.uid)
-          });
-        } else {
-          // User has not reacted, so add their reaction
-          await updateDoc(messageRef, {
-            [fieldPath]: arrayUnion(userProfile.uid)
-          });
+        if (!userProfile || !db || !activeChannel) return;
+        const messageRef = doc(db, 'chatChannels', activeChannel.id, 'messages', message.id);
+        const usersWhoReacted = message.reactions?.[emoji] || [];
+        const userHasReacted = usersWhoReacted.includes(userProfile.uid);
+        const fieldPath = `reactions.${emoji}`;
+        await updateDoc(messageRef, { [fieldPath]: userHasReacted ? arrayRemove(userProfile.uid) : arrayUnion(userProfile.uid) });
+    };
+
+    const formatDate = (timestamp: Timestamp | null | undefined): string => {
+        if (!timestamp?.toDate) return '';
+        return timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    };
+
+    const handleScrollToMessage = (messageId: string) => {
+        const element = document.getElementById(`message-${messageId}`);
+        if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            element.classList.add('bg-primary/10', 'transition-all', 'duration-500');
+            setTimeout(() => element.classList.remove('bg-primary/10'), 2000);
         }
-      } catch (error) {
-        console.error("Error updating reaction:", error);
-        toast({
-          title: "Erro",
-          description: "Não foi possível adicionar/remover a reação.",
-          variant: "destructive",
-        });
-      }
     };
 
 
-  const formatDate = (timestamp: Timestamp | null | undefined): string => {
-    if (!timestamp || !timestamp.toDate) return '';
-    return timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
+    // --- Channel/Category Management ---
+    const handleOpenChannelModal = (categoryId: string, channel?: ChatChannel) => {
+        setEditingChannel({ categoryId, channel });
+        setChannelName(channel?.name || '');
+        setIsChannelModalOpen(true);
+    };
 
-   // Scroll to bottom when new messages are added
+    const handleSaveChannel = async () => {
+        if (!editingChannel || !channelName.trim() || !db) return;
+        const { categoryId, channel } = editingChannel;
+
+        try {
+            if (channel) { // Editing existing channel
+                const channelRef = doc(db, 'chatChannels', channel.id);
+                await updateDoc(channelRef, { name: channelName.trim() });
+                toast({ title: "Canal Atualizado!" });
+            } else { // Creating new channel
+                await addDoc(collection(db, 'chatChannels'), {
+                    name: channelName.trim(),
+                    categoryId: categoryId,
+                    createdAt: serverTimestamp(),
+                });
+                toast({ title: "Canal Criado!" });
+            }
+            // Refresh local state (simple refetch for now)
+             const channelsSnapshot = await getDocs(query(collection(db, 'chatChannels'), orderBy('createdAt', 'asc')));
+             const fetchedChannels = channelsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatChannel[];
+             setChannels(fetchedChannels);
+
+            setIsChannelModalOpen(false);
+            setEditingChannel(null);
+            setChannelName('');
+        } catch (error) {
+            console.error("Error saving channel:", error);
+            toast({ title: "Erro", description: "Não foi possível salvar o canal.", variant: "destructive" });
+        }
+    };
+
+  // Scroll to bottom when new messages are added
   useEffect(() => {
     if (scrollAreaRef.current) {
       const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
@@ -230,41 +283,61 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     }
   }, [messages]);
 
-  const handleScrollToMessage = (messageId: string) => {
-    const element = document.getElementById(`message-${messageId}`);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      // Add a temporary highlight effect
-      element.classList.add('bg-primary/10', 'transition-all', 'duration-500');
-      setTimeout(() => {
-        element.classList.remove('bg-primary/10');
-      }, 2000); // Remove highlight after 2 seconds
-    }
-  };
-
 
   return (
     <div className="flex w-full bg-secondary/40 rounded-lg border border-border h-[calc(100vh-var(--header-height)-4rem)]">
       {/* Channel List Sidebar */}
       <aside className="w-60 flex-shrink-0 bg-card/50 p-2 flex flex-col">
-        <h2 className="text-md font-semibold text-foreground px-2 py-1 mb-2">Canais</h2>
+        <header className="flex items-center justify-between p-2 mb-1">
+            <h2 className="text-md font-semibold text-foreground">Canais</h2>
+            {userProfile?.isAdmin && (
+                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsManageCategoriesOpen(true)}>
+                    <Settings className="h-4 w-4" />
+                </Button>
+            )}
+        </header>
         <ScrollArea className="flex-1">
-          <nav className="space-y-1">
-            {channels.map(channel => (
-              <Button
-                key={channel.id}
-                variant="ghost"
-                onClick={() => setActiveChannel(channel.id)}
-                className={cn(
-                  'w-full justify-start text-muted-foreground',
-                  activeChannel === channel.id && 'bg-accent text-accent-foreground'
-                )}
-              >
-                <Hash className="mr-2 h-4 w-4" />
-                {channel.name}
-              </Button>
-            ))}
-          </nav>
+          {isLoading ? (
+             <div className="p-2 space-y-2">
+                <div className="h-8 bg-muted rounded-md animate-pulse"></div>
+                <div className="h-6 bg-muted rounded-md animate-pulse ml-4"></div>
+             </div>
+          ) : (
+            <Accordion type="multiple" defaultValue={categories.map(c => c.id)} className="w-full">
+                {categories.map(category => (
+                    <AccordionItem value={category.id} key={category.id} className="border-b-0">
+                        <div className="flex items-center justify-between group">
+                            <AccordionTrigger className="flex-1 text-xs font-semibold uppercase text-muted-foreground hover:text-foreground py-1 px-2">
+                                {category.name}
+                            </AccordionTrigger>
+                            {userProfile?.isAdmin && (
+                                <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100" onClick={() => handleOpenChannelModal(category.id)}>
+                                    <Plus className="h-4 w-4" />
+                                </Button>
+                            )}
+                        </div>
+                        <AccordionContent className="pl-2 pb-1">
+                            <nav className="space-y-1">
+                                {channels.filter(c => c.categoryId === category.id).map(channel => (
+                                    <Button
+                                        key={channel.id}
+                                        variant="ghost"
+                                        onClick={() => handleChannelClick(channel)}
+                                        className={cn(
+                                            'w-full justify-start text-muted-foreground',
+                                            activeChannel?.id === channel.id && 'bg-accent text-accent-foreground'
+                                        )}
+                                    >
+                                        <Hash className="mr-2 h-4 w-4" />
+                                        {channel.name}
+                                    </Button>
+                                ))}
+                            </nav>
+                        </AccordionContent>
+                    </AccordionItem>
+                ))}
+            </Accordion>
+          )}
         </ScrollArea>
       </aside>
 
@@ -274,28 +347,28 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         <header className="flex items-center h-14 border-b border-border px-4 flex-shrink-0">
           <Hash className="h-5 w-5 text-muted-foreground" />
           <h1 className="text-lg font-semibold text-foreground ml-1">
-            {channels.find(c => c.id === activeChannel)?.name}
+            {activeChannel?.name || 'Selecione um canal'}
           </h1>
         </header>
 
         {/* Messages Area */}
-        <div className="flex-1 overflow-hidden">
-             <ScrollArea className="h-full" ref={scrollAreaRef}>
-                 <div className="p-4 space-y-4 pr-4">
-                  {isLoadingMessages ? (
-                    <div className="flex justify-center items-center h-full">
-                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                    </div>
+         <div className="flex-1 overflow-hidden flex flex-col">
+             <ScrollArea className="flex-1" ref={scrollAreaRef}>
+                 <div className="p-4 space-y-4 pr-4 min-h-full flex flex-col justify-end">
+                  {!activeChannel ? (
+                     <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                        <MessageSquareReply className="h-12 w-12 mb-4" />
+                        <p>Selecione um canal para começar a conversar.</p>
+                     </div>
                   ) : messages.length === 0 ? (
-                      <div className="flex justify-center items-center h-full">
-                          <p className="text-muted-foreground text-sm">Seja o primeiro a enviar uma mensagem em #{channels.find(c => c.id === activeChannel)?.name}!</p>
+                      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                          <p className="text-sm">Seja o primeiro a enviar uma mensagem em #{activeChannel.name}!</p>
                       </div>
                   ) : (
                     messages.map(msg => {
                       const canDelete = userProfile?.isAdmin || userProfile?.uid === msg.user.uid;
                       return (
                         <div key={msg.id} id={`message-${msg.id}`} className="group relative flex items-start gap-3 p-2 rounded-md hover:bg-accent/5">
-                         {/* Message Actions - Appears on hover */}
                          <div className="absolute top-0 right-2 -mt-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                             <div className="flex items-center gap-1 bg-card border border-border rounded-md shadow-md p-1">
                                <Popover>
@@ -355,7 +428,6 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                                 </DropdownMenu>
                             </div>
                          </div>
-                        {/* End Message Actions */}
 
                         <Avatar className="h-10 w-10 border">
                             <AvatarImage src={msg.user.avatar || undefined} />
@@ -379,7 +451,6 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                                 <p className="text-xs text-muted-foreground">{formatDate(msg.createdAt)}</p>
                             </div>
                             <p className="text-sm text-foreground/90">{msg.text}</p>
-                            {/* Reactions Display */}
                              {msg.reactions && Object.keys(msg.reactions).length > 0 && (
                                <div className="mt-1 flex flex-wrap gap-1">
                                  {Object.entries(msg.reactions).map(([emoji, uids]) => {
@@ -432,17 +503,44 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                   ref={inputRef}
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder={`Conversar em #${channels.find(c => c.id === activeChannel)?.name}`}
+                  placeholder={activeChannel ? `Conversar em #${activeChannel.name}` : 'Selecione um canal para conversar'}
                   className={cn("flex-1 bg-input", replyingTo && "rounded-t-none")}
                   autoComplete="off"
-                  disabled={!userProfile}
+                  disabled={!userProfile || !activeChannel}
                 />
-                <Button type="submit" size="icon" className="flex-shrink-0" disabled={!userProfile || newMessage.trim() === ''}>
+                <Button type="submit" size="icon" className="flex-shrink-0" disabled={!userProfile || !activeChannel || newMessage.trim() === ''}>
                   <Send className="h-4 w-4" />
                 </Button>
             </form>
         </div>
       </div>
+      
+       {/* Channel Modal */}
+       <Dialog open={isChannelModalOpen} onOpenChange={setIsChannelModalOpen}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>{editingChannel?.channel ? 'Editar Canal' : 'Criar Novo Canal'}</DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <label htmlFor="channel-name" className="text-right">Nome</label>
+                        <Input
+                            id="channel-name"
+                            value={channelName}
+                            onChange={(e) => setChannelName(e.target.value)}
+                            className="col-span-3"
+                            placeholder="ex: geral"
+                        />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <DialogClose asChild>
+                        <Button type="button" variant="secondary">Cancelar</Button>
+                    </DialogClose>
+                    <Button type="button" onClick={handleSaveChannel}>Salvar</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </div>
   );
 }
