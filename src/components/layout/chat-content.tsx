@@ -130,6 +130,18 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     }
   }, [messages]);
 
+  const handleScrollToMessage = (messageId: string) => {
+    const element = document.getElementById(`message-${messageId}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Add a temporary highlight effect
+      element.classList.add('bg-primary/10', 'transition-all', 'duration-500');
+      setTimeout(() => {
+        element.classList.remove('bg-primary/10');
+      }, 2000); // Remove highlight after 2 seconds
+    }
+  };
+
 
   return (
     <div className="flex h-[calc(100vh-var(--header-height)-var(--footer-height,0px)-2rem)] w-full bg-secondary/40 rounded-lg border border-border">
@@ -181,7 +193,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                           </div>
                       ) : (
                         messages.map(msg => (
-                          <div key={msg.id} className="group relative flex items-start gap-3 p-2 rounded-md hover:bg-accent/5">
+                          <div key={msg.id} id={`message-${msg.id}`} className="group relative flex items-start gap-3 p-2 rounded-md hover:bg-accent/5">
                              {/* Message Actions - Appears on hover */}
                              <div className="absolute top-0 right-2 -mt-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                                 <div className="flex items-center gap-1 bg-card border border-border rounded-md shadow-md p-1">
@@ -209,11 +221,14 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                             </Avatar>
                             <div className="flex-1">
                                 {msg.replyTo && (
-                                    <div className="mb-1 text-xs text-muted-foreground flex items-center">
-                                         <MessageSquareReply className="h-3 w-3 mr-1.5" />
+                                    <button
+                                      onClick={() => handleScrollToMessage(msg.replyTo.messageId)}
+                                      className="w-full text-left mb-1 text-xs text-muted-foreground flex items-center hover:bg-secondary p-1 rounded-md"
+                                    >
+                                         <MessageSquareReply className="h-3 w-3 mr-1.5 flex-shrink-0" />
                                         Respondendo a <span className="font-semibold text-foreground/80 mx-1">{msg.replyTo.authorName}</span>:
                                         <p className="ml-1 italic truncate max-w-[200px]">"{msg.replyTo.text}"</p>
-                                    </div>
+                                    </button>
                                 )}
                                 <div className="flex items-baseline gap-2">
                                     <p className="font-semibold text-foreground">{msg.user.name}</p>
