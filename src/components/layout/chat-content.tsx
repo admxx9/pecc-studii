@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Hash, Send, UserCircle } from 'lucide-react';
+import { Hash, Send, UserCircle, MessageSquareReply, Smile, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { UserProfile } from '@/components/page/home-client-page';
 
@@ -105,10 +105,29 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         {/* Messages Area */}
         <div className="flex-1 overflow-hidden p-4">
             <ScrollArea className="h-full" ref={scrollAreaRef}>
-              <div className="flex flex-col justify-end min-h-full">
+              <div className="flex flex-col min-h-full justify-end">
                 <div className="space-y-4 pr-4">
                 {messages[activeChannel as keyof typeof messages].map(msg => (
-                    <div key={msg.id} className="flex items-start gap-3">
+                  <div key={msg.id} className="group relative flex items-start gap-3 p-2 rounded-md hover:bg-accent/5">
+                    {/* Message Actions - Appears on hover */}
+                     <div className="absolute top-0 right-2 -mt-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                        <div className="flex items-center gap-1 bg-card border border-border rounded-md shadow-md p-1">
+                           <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
+                             <Smile className="h-4 w-4" />
+                             <span className="sr-only">Adicionar Reação</span>
+                           </Button>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
+                             <MessageSquareReply className="h-4 w-4" />
+                              <span className="sr-only">Responder</span>
+                           </Button>
+                           <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
+                             <MoreHorizontal className="h-4 w-4" />
+                             <span className="sr-only">Mais</span>
+                           </Button>
+                        </div>
+                     </div>
+                    {/* End Message Actions */}
+
                     <Avatar className="h-10 w-10 border">
                         <AvatarImage src={msg.user.avatar || undefined} />
                         <AvatarFallback>
@@ -122,7 +141,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                         </div>
                         <p className="text-sm text-foreground/90">{msg.text}</p>
                     </div>
-                    </div>
+                  </div>
                 ))}
                 </div>
               </div>
