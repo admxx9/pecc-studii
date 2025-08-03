@@ -202,7 +202,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
 
 
   return (
-    <div className="flex h-full w-full bg-secondary/40 rounded-lg border border-border">
+    <div className="flex w-full bg-secondary/40 rounded-lg border border-border h-[calc(100vh-var(--header-height)-4rem)]">
       {/* Channel List Sidebar */}
       <aside className="w-60 flex-shrink-0 bg-card/50 p-2 flex flex-col">
         <h2 className="text-md font-semibold text-foreground px-2 py-1 mb-2">Canais</h2>
@@ -238,8 +238,8 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
 
         {/* Messages Area */}
         <div className="flex-1 overflow-hidden">
-             <ScrollArea className="h-full p-4" ref={scrollAreaRef}>
-                 <div className="space-y-4 pr-4">
+             <ScrollArea className="h-full" ref={scrollAreaRef}>
+                 <div className="p-4 space-y-4 pr-4">
                   {isLoadingMessages ? (
                     <div className="flex justify-center items-center h-full">
                       <Loader2 className="h-6 w-6 animate-spin text-primary" />
