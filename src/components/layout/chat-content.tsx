@@ -10,6 +10,15 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Hash, Send, UserCircle, MessageSquareReply, Smile, MoreHorizontal, Loader2, X, Trash2, Copy as CopyIcon, Settings, Plus, GripVertical } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+
 
 import {
   DropdownMenu,
@@ -87,6 +96,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     const [isChannelModalOpen, setIsChannelModalOpen] = useState(false);
     const [editingChannel, setEditingChannel] = useState<{ categoryId: string, channel?: ChatChannel } | null>(null);
     const [channelName, setChannelName] = useState('');
+    const [selectedCategoryId, setSelectedCategoryId] = useState('');
 
 
     // --- Data Fetching ---
@@ -247,25 +257,29 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
 
 
     // --- Channel/Category Management ---
-    const handleOpenChannelModal = (categoryId: string, channel?: ChatChannel) => {
-        setEditingChannel({ categoryId, channel });
+    const handleOpenChannelModal = (categoryId?: string, channel?: ChatChannel) => {
+        setEditingChannel(channel ? { categoryId: channel.categoryId, channel } : { categoryId: categoryId || '' });
         setChannelName(channel?.name || '');
+        setSelectedCategoryId(channel?.categoryId || categoryId || '');
         setIsChannelModalOpen(true);
     };
 
     const handleSaveChannel = async () => {
-        if (!editingChannel || !channelName.trim() || !db) return;
-        const { categoryId, channel } = editingChannel;
+        if (!channelName.trim() || !selectedCategoryId || !db) {
+             toast({ title: "Erro", description: "Nome do canal e categoria são obrigatórios.", variant: "destructive" });
+            return;
+        }
+        const { channel } = editingChannel || {};
 
         try {
             if (channel) { // Editing existing channel
                 const channelRef = doc(db, 'chatChannels', channel.id);
-                await updateDoc(channelRef, { name: channelName.trim() });
+                await updateDoc(channelRef, { name: channelName.trim(), categoryId: selectedCategoryId });
                 toast({ title: "Canal Atualizado!" });
             } else { // Creating new channel
                 await addDoc(collection(db, 'chatChannels'), {
                     name: channelName.trim(),
-                    categoryId: categoryId,
+                    categoryId: selectedCategoryId,
                     createdAt: serverTimestamp(),
                 });
                 toast({ title: "Canal Criado!" });
@@ -289,12 +303,17 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     <div className="flex w-full bg-secondary/40 rounded-lg border border-border h-[calc(100vh-var(--header-height)-4rem)]">
       {/* Channel List Sidebar */}
       <aside className="w-60 flex-shrink-0 bg-card/50 p-2 flex flex-col">
-        <header className="flex items-center justify-between p-2 mb-1">
+         <header className="flex items-center justify-between p-2 mb-1">
             <h2 className="text-md font-semibold text-foreground">Canais</h2>
             {userProfile?.isAdmin && (
-                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsManageCategoriesOpen(true)}>
-                    <Settings className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleOpenChannelModal()}>
+                        <Plus className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsManageCategoriesOpen(true)}>
+                        <Settings className="h-4 w-4" />
+                    </Button>
+                </div>
             )}
         </header>
         <ScrollArea className="flex-1">
@@ -311,11 +330,6 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                             <AccordionTrigger className="flex-1 text-xs font-semibold uppercase text-muted-foreground hover:text-foreground py-1 px-2">
                                 {category.name}
                             </AccordionTrigger>
-                            {userProfile?.isAdmin && (
-                                <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100" onClick={() => handleOpenChannelModal(category.id)}>
-                                    <Plus className="h-4 w-4" />
-                                </Button>
-                            )}
                         </div>
                         <AccordionContent className="pl-2 pb-1">
                             <nav className="space-y-1">
@@ -524,7 +538,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                     <div className="grid grid-cols-4 items-center gap-4">
-                        <label htmlFor="channel-name" className="text-right">Nome</label>
+                        <Label htmlFor="channel-name" className="text-right">Nome</Label>
                         <Input
                             id="channel-name"
                             value={channelName}
@@ -532,6 +546,21 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                             className="col-span-3"
                             placeholder="ex: geral"
                         />
+                    </div>
+                     <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="channel-category" className="text-right">Categoria</Label>
+                        <Select onValueChange={setSelectedCategoryId} value={selectedCategoryId}>
+                            <SelectTrigger id="channel-category" className="col-span-3">
+                                <SelectValue placeholder="Selecione uma categoria" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {categories.map(category => (
+                                    <SelectItem key={category.id} value={category.id}>
+                                        {category.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
                 </div>
                 <DialogFooter>
@@ -545,4 +574,6 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     </div>
   );
 }
+
+
 
