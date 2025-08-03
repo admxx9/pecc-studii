@@ -181,7 +181,10 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
    // Scroll to bottom when new messages are added
   useEffect(() => {
     if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
+      const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
     }
   }, [messages]);
 
@@ -234,93 +237,91 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         </header>
 
         {/* Messages Area */}
-        <div className="flex-1 overflow-hidden p-4">
-             <ScrollArea className="h-full" ref={scrollAreaRef}>
-                 <div className="flex flex-col min-h-full justify-end">
-                    <div className="space-y-4 pr-4">
-                      {isLoadingMessages ? (
-                        <div className="flex justify-center items-center h-full">
-                          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                        </div>
-                      ) : messages.length === 0 ? (
-                          <div className="flex justify-center items-center h-full">
-                              <p className="text-muted-foreground text-sm">Seja o primeiro a enviar uma mensagem em #{channels.find(c => c.id === activeChannel)?.name}!</p>
-                          </div>
-                      ) : (
-                        messages.map(msg => {
-                          const canDelete = userProfile?.isAdmin || userProfile?.uid === msg.user.uid;
-                          return (
-                            <div key={msg.id} id={`message-${msg.id}`} className="group relative flex items-start gap-3 p-2 rounded-md hover:bg-accent/5">
-                             {/* Message Actions - Appears on hover */}
-                             <div className="absolute top-0 right-2 -mt-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                                <div className="flex items-center gap-1 bg-card border border-border rounded-md shadow-md p-1">
-                                   <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
-                                     <Smile className="h-4 w-4" />
-                                     <span className="sr-only">Adicionar Reação</span>
-                                   </Button>
-                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground" onClick={() => handleReplyClick(msg)}>
-                                     <MessageSquareReply className="h-4 w-4" />
-                                      <span className="sr-only">Responder</span>
-                                   </Button>
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                           <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
-                                             <MoreHorizontal className="h-4 w-4" />
-                                             <span className="sr-only">Mais</span>
-                                           </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end" className="bg-card border-border">
-                                            <DropdownMenuItem onSelect={() => handleReplyClick(msg)} className="cursor-pointer">
-                                                 <MessageSquareReply className="mr-2 h-4 w-4" />
-                                                <span>Responder</span>
-                                            </DropdownMenuItem>
-                                             <DropdownMenuItem onSelect={() => handleCopyText(msg.text)} className="cursor-pointer">
-                                                <CopyIcon className="mr-2 h-4 w-4" />
-                                                <span>Copiar Texto</span>
-                                            </DropdownMenuItem>
-                                            {canDelete && (
-                                              <>
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuItem onSelect={() => handleDeleteMessage(msg.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer">
-                                                    <Trash2 className="mr-2 h-4 w-4" />
-                                                    <span>Excluir Mensagem</span>
-                                                </DropdownMenuItem>
-                                              </>
-                                            )}
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </div>
-                             </div>
-                            {/* End Message Actions */}
-
-                            <Avatar className="h-10 w-10 border">
-                                <AvatarImage src={msg.user.avatar || undefined} />
-                                <AvatarFallback>
-                                     {msg.user.name ? msg.user.name.substring(0, 2).toUpperCase() : <UserCircle />}
-                                </AvatarFallback>
-                            </Avatar>
-                            <div className="flex-1">
-                                {msg.replyTo && (
-                                    <button
-                                      onClick={() => handleScrollToMessage(msg.replyTo.messageId)}
-                                      className="w-full text-left mb-1 text-xs text-muted-foreground flex items-center hover:bg-secondary p-1 rounded-md"
-                                    >
-                                         <MessageSquareReply className="h-3 w-3 mr-1.5 flex-shrink-0" />
-                                        Respondendo a <span className="font-semibold text-foreground/80 mx-1">{msg.replyTo.authorName}</span>:
-                                        <p className="ml-1 italic truncate max-w-[200px]">"{msg.replyTo.text}"</p>
-                                    </button>
-                                )}
-                                <div className="flex items-baseline gap-2">
-                                    <p className="font-semibold text-foreground">{msg.user.name}</p>
-                                    <p className="text-xs text-muted-foreground">{formatDate(msg.createdAt)}</p>
-                                </div>
-                                <p className="text-sm text-foreground/90">{msg.text}</p>
-                            </div>
-                          </div>
-                          )
-                        })
-                      )}
+        <div className="flex-1 overflow-hidden">
+             <ScrollArea className="h-full p-4" ref={scrollAreaRef}>
+                 <div className="space-y-4 pr-4">
+                  {isLoadingMessages ? (
+                    <div className="flex justify-center items-center h-full">
+                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
                     </div>
+                  ) : messages.length === 0 ? (
+                      <div className="flex justify-center items-center h-full">
+                          <p className="text-muted-foreground text-sm">Seja o primeiro a enviar uma mensagem em #{channels.find(c => c.id === activeChannel)?.name}!</p>
+                      </div>
+                  ) : (
+                    messages.map(msg => {
+                      const canDelete = userProfile?.isAdmin || userProfile?.uid === msg.user.uid;
+                      return (
+                        <div key={msg.id} id={`message-${msg.id}`} className="group relative flex items-start gap-3 p-2 rounded-md hover:bg-accent/5">
+                         {/* Message Actions - Appears on hover */}
+                         <div className="absolute top-0 right-2 -mt-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                            <div className="flex items-center gap-1 bg-card border border-border rounded-md shadow-md p-1">
+                               <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
+                                 <Smile className="h-4 w-4" />
+                                 <span className="sr-only">Adicionar Reação</span>
+                               </Button>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground" onClick={() => handleReplyClick(msg)}>
+                                 <MessageSquareReply className="h-4 w-4" />
+                                  <span className="sr-only">Responder</span>
+                               </Button>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                       <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
+                                         <MoreHorizontal className="h-4 w-4" />
+                                         <span className="sr-only">Mais</span>
+                                       </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="bg-card border-border">
+                                        <DropdownMenuItem onSelect={() => handleReplyClick(msg)} className="cursor-pointer">
+                                             <MessageSquareReply className="mr-2 h-4 w-4" />
+                                            <span>Responder</span>
+                                        </DropdownMenuItem>
+                                         <DropdownMenuItem onSelect={() => handleCopyText(msg.text)} className="cursor-pointer">
+                                            <CopyIcon className="mr-2 h-4 w-4" />
+                                            <span>Copiar Texto</span>
+                                        </DropdownMenuItem>
+                                        {canDelete && (
+                                          <>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem onSelect={() => handleDeleteMessage(msg.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer">
+                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                <span>Excluir Mensagem</span>
+                                            </DropdownMenuItem>
+                                          </>
+                                        )}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
+                         </div>
+                        {/* End Message Actions */}
+
+                        <Avatar className="h-10 w-10 border">
+                            <AvatarImage src={msg.user.avatar || undefined} />
+                            <AvatarFallback>
+                                 {msg.user.name ? msg.user.name.substring(0, 2).toUpperCase() : <UserCircle />}
+                            </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                            {msg.replyTo && (
+                                <button
+                                  onClick={() => handleScrollToMessage(msg.replyTo.messageId)}
+                                  className="w-full text-left mb-1 text-xs text-muted-foreground flex items-center hover:bg-secondary p-1 rounded-md"
+                                >
+                                     <MessageSquareReply className="h-3 w-3 mr-1.5 flex-shrink-0" />
+                                    Respondendo a <span className="font-semibold text-foreground/80 mx-1">{msg.replyTo.authorName}</span>:
+                                    <p className="ml-1 italic truncate max-w-[200px]">"{msg.replyTo.text}"</p>
+                                </button>
+                            )}
+                            <div className="flex items-baseline gap-2">
+                                <p className="font-semibold text-foreground">{msg.user.name}</p>
+                                <p className="text-xs text-muted-foreground">{formatDate(msg.createdAt)}</p>
+                            </div>
+                            <p className="text-sm text-foreground/90">{msg.text}</p>
+                        </div>
+                      </div>
+                      )
+                    })
+                  )}
                 </div>
             </ScrollArea>
         </div>
