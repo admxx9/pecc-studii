@@ -35,7 +35,7 @@ const plans = [
   {
     id: 'pro',
     name: 'Pro',
-    price: 299.00,
+    price: 29.00,
     period: '/mês',
     features: [
         { text: 'Acesso a todas as aulas (Premium)', included: true },
@@ -97,7 +97,7 @@ export default function PremiumPage() {
                   planName: plan.name,
                   amount: plan.price,
                   userId: user.uid,
-                  userName: user.displayName || 'N/A',
+                  userName: user.displayName || user.email,
                   userEmail: user.email, // Pass the user's email
               }),
           });
