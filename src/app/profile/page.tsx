@@ -1,0 +1,268 @@
+'use client';
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import Image from 'next/image'; // Import next/image
+import Link from 'next/link'; // Import Link
+import { onAuthStateChanged, User } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
+import Header from '@/components/layout/header';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
+import { User as UserIcon, Mail, Edit, Crown, ArrowLeft, Star, Upload } from 'lucide-react'; // Import Star icon, Upload
+import UpdateProfileForm from '@/components/profile/update-profile-form';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge'; // Import Badge
+import { ranks } from '@/config/ranks';
+import { cn } from '@/lib/utils'; // Import cn
+
+export interface UserProfileData {
+    displayName: string;
+    email: string | null;
+    photoURL: string | null;
+    rank: string;
+    isAdmin: boolean;
+    isPremium?: boolean; // Add premium status
+    premiumPlanType?: 'basic' | 'pro' | null; // Add premium plan type
+    bannerURL?: string | null; // Add banner URL
+}
+
+
+export default function ProfilePage() {
+    const [user, setUser] = useState<User | null>(null);
+    const [profile, setProfile] = useState<UserProfileData | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isEditing, setIsEditing] = useState(false); // State for the edit dialog
+    const router = useRouter();
+
+    const fetchUserProfile = useCallback(async (userId: string) => {
+        if (!db) return null;
+        const userDocRef = doc(db, 'users', userId);
+        try {
+            const docSnap = await getDoc(userDocRef);
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                return {
+                    displayName: data.displayName || user?.displayName || 'Usuário',
+                    email: data.email || user?.email || 'N/A',
+                    photoURL: data.photoURL || user?.photoURL || null,
+                    rank: data.rank || 'iniciante',
+                    isAdmin: data.isAdmin === true,
+                    isPremium: data.isPremium === true, // Fetch premium status
+                    premiumPlanType: data.premiumPlanType || null, // Fetch premium plan type
+                    bannerURL: data.bannerURL || null, // Fetch banner URL
+                } as UserProfileData;
+            } else {
+                 const defaultProfile: UserProfileData = {
+                    displayName: user?.displayName || 'Novo Usuário',
+                    email: user?.email || 'N/A',
+                    photoURL: user?.photoURL || null,
+                    rank: 'iniciante',
+                    isAdmin: false,
+                    isPremium: false,
+                    premiumPlanType: null,
+                    bannerURL: null,
+                };
+                 return defaultProfile;
+            }
+        } catch (error) {
+            console.error("Error fetching user profile:", error);
+            return null;
+        }
+    }, [user]);
+
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+            if (currentUser) {
+                setUser(currentUser);
+                const userProfile = await fetchUserProfile(currentUser.uid);
+                setProfile(userProfile);
+            } else {
+                setUser(null);
+                setProfile(null);
+                router.push('/');
+            }
+            setIsLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, [fetchUserProfile, router]);
+
+    const handleSignOut = async () => {
+      if (auth) {
+        await auth.signOut();
+        router.push('/');
+      }
+    };
+
+    const handleProfileUpdate = (updatedData: Partial<UserProfileData>) => {
+        console.log("Profile update triggered in parent:", updatedData);
+        // Update local state with new data, including potentially the bannerURL
+        setProfile(prev => prev ? { ...prev, ...updatedData } : null);
+        setIsEditing(false); // Close dialog after update
+    };
+
+
+    if (isLoading || !user) {
+        return (
+            <div className="flex flex-col min-h-screen bg-background">
+                <header className="bg-card px-6 py-3 flex items-center justify-between shadow-md h-[var(--header-height)]">
+                    <Skeleton className="h-8 w-48" />
+                     <Skeleton className="h-9 w-9 rounded-full" />
+                 </header>
+                <div className="flex-1 flex items-center justify-center">
+                   <p className="text-muted-foreground animate-pulse">Carregando perfil...</p>
+                </div>
+            </div>
+        );
+    }
+
+    const dummySetActiveTab = () => {};
+
+    return (
+        <div className="flex flex-col min-h-screen bg-background text-foreground">
+            {/* Keep the standard header */}
+            <Header
+                activeTab={'aulas'} // Default or irrelevant for profile page
+                setActiveTab={dummySetActiveTab}
+                isLoggedIn={!!user}
+                onSignOut={handleSignOut}
+                userName={profile?.displayName}
+                userRank={profile?.rank}
+                isAdmin={profile?.isAdmin ?? false}
+                userAvatarUrl={profile?.photoURL}
+            />
+            <main className="flex-1 container mx-auto pt-8 pb-12 px-4 sm:px-6 lg:px-8">
+                 {/* Back Button Remains */}
+                 <div className="mb-6 flex justify-start">
+                    <Button variant="outline" onClick={() => router.push('/')} className="text-sm">
+                        <ArrowLeft className="mr-2 h-4 w-4" />
+                        Voltar para Home
+                    </Button>
+                </div>
+
+                {/* Profile Card - Redesigned */}
+                <Card className="max-w-4xl mx-auto bg-card shadow-xl border-border rounded-lg overflow-hidden">
+                    {/* Banner Section */}
+                    <div className="h-48 md:h-64 bg-secondary relative group">
+                         {profile?.bannerURL ? (
+                            <Image
+                                src={profile.bannerURL}
+                                alt={`${profile.displayName}'s banner`}
+                                layout="fill"
+                                objectFit="cover"
+                                priority // Consider making banner priority if above the fold
+                                data-ai-hint="gaming banner"
+                            />
+                         ) : (
+                            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-secondary to-accent/10"></div> // Placeholder gradient
+                         )}
+                         {/* Placeholder for Edit Banner Button if needed later */}
+                    </div>
+
+                    {/* Profile Info Section */}
+                    <div className="p-6 md:p-8 relative">
+                        {/* Avatar (Overlaps Banner) */}
+                         <div className="absolute -top-12 left-6 md:left-8 transform">
+                            {/* Wrap Avatar and Edit Button in a relative container */}
+                            <div className="relative group">
+                                <Avatar className="h-24 w-24 md:h-32 md:w-32 border-4 border-background bg-background shadow-lg">
+                                    <AvatarImage src={profile?.photoURL || undefined} alt={profile?.displayName} />
+                                    <AvatarFallback className="text-4xl md:text-5xl">
+                                        {profile?.displayName ? profile.displayName.substring(0, 2).toUpperCase() : <UserIcon className="h-12 w-12 md:h-16 md:w-16" />}
+                                    </AvatarFallback>
+                                </Avatar>
+                                {/* Edit Icon/Button Overlay - Triggers dialog */}
+                                <Dialog open={isEditing && !isEditing} onOpenChange={(open) => { if (!open) setIsEditing(false); /* prevent closing immediately */ }}>
+                                    <DialogTrigger asChild>
+                                        <Button
+                                          variant="outline"
+                                          size="icon"
+                                          className="absolute bottom-1 right-1 h-8 w-8 rounded-full bg-background/80 backdrop-blur-sm border border-border text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-background hover:text-primary"
+                                          title="Editar foto de perfil"
+                                          onClick={() => setIsEditing(true)} // Explicitly set editing state
+                                        >
+                                          <Edit className="h-4 w-4" />
+                                          <span className="sr-only">Editar foto de perfil</span>
+                                        </Button>
+                                    </DialogTrigger>
+                                    {/* Content is now outside the trigger scope to manage open state */}
+                                </Dialog>
+                            </div>
+                         </div>
+
+                         {/* Profile Details (Positioned below Avatar space) */}
+                         <div className="pt-16 md:pt-20 flex flex-col md:flex-row md:items-end md:justify-between">
+                             {/* Left: Name, Email, Badges */}
+                            <div className="mb-4 md:mb-0">
+                                <CardTitle className="text-2xl md:text-3xl font-semibold text-foreground mb-1">{profile?.displayName || 'Usuário'}</CardTitle>
+                                <CardDescription className="text-muted-foreground flex items-center gap-1.5 text-sm mb-2">
+                                     <Mail className="h-4 w-4" /> {profile?.email || 'Email não disponível'}
+                                </CardDescription>
+                                {/* Badges Section */}
+                                <div className="flex items-center gap-2 flex-wrap mt-2">
+                                    {/* Rank or Admin Badge */}
+                                    {profile?.isAdmin ? (
+                                        <Badge variant="default" className="bg-primary text-primary-foreground px-3 py-1 text-sm font-bold flex items-center">
+                                            <Crown className="h-4 w-4 mr-1.5" /> ADMIN
+                                        </Badge>
+                                     ) : (
+                                        <Badge variant="secondary" className="px-3 py-1 text-sm">
+                                            {/* Display user rank */}
+                                            {ranks[profile?.rank?.toLowerCase() || 'iniciante'] || 'Iniciante'}
+                                        </Badge>
+                                     )}
+
+                                     {/* Premium Status: Show Badge if premium, Button if not */}
+                                     {profile?.isPremium ? (
+                                        <Badge variant="outline" className="border-yellow-500 text-yellow-600 px-3 py-1 text-sm font-medium flex items-center">
+                                            <Star className="h-4 w-4 mr-1.5 text-yellow-500" />
+                                            Premium {profile.premiumPlanType === 'pro' ? 'Pro' : profile.premiumPlanType === 'basic' ? 'Básico' : ''}
+                                        </Badge>
+                                     ) : (
+                                        // Show 'View Premium Plans' button if user is NOT premium
+                                        <Button asChild variant="outline" size="sm" className="border-yellow-500 text-yellow-600 hover:bg-yellow-500/10 hover:text-yellow-700 transition-colors text-xs px-3 py-1 h-auto">
+                                          <Link href="/premium">
+                                            <Star className="h-3 w-3 mr-1.5" />
+                                            Ver Planos Premium
+                                          </Link>
+                                        </Button>
+                                      )}
+                                </div>
+                             </div>
+                             {/* Right: Edit Button (Triggers the dialog) */}
+                             <div className="flex-shrink-0 mt-4 md:mt-0">
+                                 <Dialog open={isEditing} onOpenChange={setIsEditing}>
+                                    <DialogTrigger asChild>
+                                        <Button variant="outline">
+                                            <Edit className="h-4 w-4 mr-2" /> Editar Perfil
+                                        </Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="sm:max-w-[480px] bg-card border-border">
+                                        {/* Render form only when user and profile are loaded */}
+                                        {user && profile ? (
+                                            <UpdateProfileForm
+                                                currentUser={user}
+                                                currentProfile={profile}
+                                                onUpdateSuccess={handleProfileUpdate}
+                                                setOpen={setIsEditing}
+                                            />
+                                        ) : (
+                                            <div className="p-6 text-center text-muted-foreground">Carregando dados...</div>
+                                        )}
+                                    </DialogContent>
+                                 </Dialog>
+                             </div>
+                         </div>
+
+                        {/* Additional Profile Sections (Optional) */}
+                        {/* <div className="border-t border-border mt-6 pt-6"> ... </div> */}
+                    </div>
+                </Card>
+            </main>
+        </div>
+    );
+}
