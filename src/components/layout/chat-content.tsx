@@ -93,7 +93,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
           </h1>
         </header>
 
-        {/* Messages Area - This now grows */}
+        {/* Messages Area - This now grows and scrolls internally */}
         <div className="flex-1 overflow-hidden">
             <ScrollArea className="h-full p-4">
                 <div className="space-y-4 pr-4">
