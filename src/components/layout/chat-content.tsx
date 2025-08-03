@@ -7,11 +7,19 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Hash, Send, UserCircle, MessageSquareReply, Smile, MoreHorizontal, Loader2, X } from 'lucide-react';
+import { Hash, Send, UserCircle, MessageSquareReply, Smile, MoreHorizontal, Loader2, X, Trash2, Copy as CopyIcon } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from '@/lib/utils';
 import type { UserProfile } from '@/components/page/home-client-page';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, Timestamp, doc, deleteDoc } from 'firebase/firestore';
+import { useToast } from "@/hooks/use-toast";
 
 
 // Mock data for channels - can be moved to Firestore later
@@ -52,6 +60,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
 
   // Firestore listener for messages
   useEffect(() => {
@@ -116,6 +125,36 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
   const cancelReply = () => {
     setReplyingTo(null);
   };
+
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!db) return;
+    // TODO: Add permission check (is author or admin)
+    const messageRef = doc(db, 'chatChannels', activeChannel, 'messages', messageId);
+    try {
+      await deleteDoc(messageRef);
+      toast({
+        title: "Mensagem Excluída",
+        description: "A mensagem foi removida do chat.",
+        variant: 'default',
+      });
+    } catch (error) {
+      console.error("Error deleting message:", error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível excluir a mensagem.",
+        variant: "destructive",
+      });
+    }
+  };
+
+   const handleCopyText = (text: string) => {
+        navigator.clipboard.writeText(text).then(() => {
+            toast({ title: "Texto copiado!" });
+        }).catch(err => {
+            console.error('Failed to copy text: ', err);
+            toast({ title: "Erro", description: "Não foi possível copiar o texto.", variant: "destructive"});
+        });
+    };
 
 
   const formatDate = (timestamp: Timestamp | null | undefined): string => {
@@ -205,10 +244,29 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                                      <MessageSquareReply className="h-4 w-4" />
                                       <span className="sr-only">Responder</span>
                                    </Button>
-                                   <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
-                                     <MoreHorizontal className="h-4 w-4" />
-                                     <span className="sr-only">Mais</span>
-                                   </Button>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                           <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
+                                             <MoreHorizontal className="h-4 w-4" />
+                                             <span className="sr-only">Mais</span>
+                                           </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="bg-card border-border">
+                                            <DropdownMenuItem onSelect={() => handleReplyClick(msg)} className="cursor-pointer">
+                                                 <MessageSquareReply className="mr-2 h-4 w-4" />
+                                                <span>Responder</span>
+                                            </DropdownMenuItem>
+                                             <DropdownMenuItem onSelect={() => handleCopyText(msg.text)} className="cursor-pointer">
+                                                <CopyIcon className="mr-2 h-4 w-4" />
+                                                <span>Copiar Texto</span>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem onSelect={() => handleDeleteMessage(msg.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer">
+                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                <span>Excluir Mensagem</span>
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
                                 </div>
                              </div>
                             {/* End Message Actions */}
@@ -278,3 +336,5 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     </div>
   );
 }
+
+    
