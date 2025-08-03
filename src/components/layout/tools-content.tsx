@@ -15,6 +15,8 @@ import { cn } from '@/lib/utils'; // Import cn
 import type { Tool } from './tools-content'; // Import Tool type
 import type { UserProfile } from '@/components/admin/manage-users'; // Import UserProfile
 import { useToast } from "@/hooks/use-toast"; // Import useToast
+import Image from 'next/image';
+
 
 interface ToolsContentProps {
   selectedCategory: string | null; // Accept the selected category
@@ -275,83 +277,91 @@ export default function ToolsContent({ selectedCategory }: ToolsContentProps) {
                                     <Card
                                         key={tool.id}
                                         id={`tool-card-${tool.id}`} // Add unique ID for scrolling
-                                        className="bg-secondary border-border p-4 flex flex-col rounded-md shadow-sm hover:shadow-md transition-shadow duration-200"
+                                        className="bg-secondary border-border p-4 flex flex-col sm:flex-row items-start gap-4 rounded-md shadow-sm hover:shadow-md transition-shadow duration-200"
                                         ref={searchParams.get('toolId') === tool.id ? highlightedToolRef : null} // Add ref conditionally
                                     >
-                                        <div className="flex-1 mb-3">
-                                            <h3 className="text-lg font-medium text-foreground flex items-center gap-1.5">
-                                                 {/* Show star based on requiredPlan */}
-                                                 {(tool.requiredPlan === 'basic' || tool.requiredPlan === 'pro') &&
-                                                    <Star className="w-4 h-4 text-yellow-500 flex-shrink-0" title={`Requer Plano ${tool.requiredPlan}`}/>
-                                                 }
-                                                {tool.name}
-                                            </h3>
-                                            <p className="text-sm text-muted-foreground mt-1 line-clamp-2 flex-grow">{tool.description}</p> {/* Add flex-grow to push info down */}
-                                            <div className="text-xs text-muted-foreground mt-2 flex flex-wrap gap-x-3 gap-y-1">
-                                                <span>Versão: <span className="font-medium text-foreground/90">{tool.version}</span></span>
-                                                <span>Tamanho: <span className="font-medium text-foreground/90">{tool.size}</span></span>
-                                                <span>Categoria: <span className="font-medium text-foreground/90">{tool.category}</span></span>
+                                        <div className="flex-1 flex flex-col">
+                                            <div className="flex-1 mb-3">
+                                                <h3 className="text-lg font-medium text-foreground flex items-center gap-1.5">
+                                                     {(tool.requiredPlan === 'basic' || tool.requiredPlan === 'pro') &&
+                                                        <Star className="w-4 h-4 text-yellow-500 flex-shrink-0" title={`Requer Plano ${tool.requiredPlan}`}/>
+                                                     }
+                                                    {tool.name}
+                                                </h3>
+                                                <p className="text-sm text-muted-foreground mt-1 line-clamp-2 flex-grow">{tool.description}</p>
+                                                <div className="text-xs text-muted-foreground mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                                                    <span>Versão: <span className="font-medium text-foreground/90">{tool.version}</span></span>
+                                                    <span>Tamanho: <span className="font-medium text-foreground/90">{tool.size}</span></span>
+                                                    <span>Categoria: <span className="font-medium text-foreground/90">{tool.category}</span></span>
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto flex-shrink-0 mt-auto">
+                                                <Button
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    className="hover:bg-accent hover:text-accent-foreground transition-colors w-full sm:w-auto"
+                                                    onClick={() => handleInfoClick(tool.id)}
+                                                    disabled={isCurrentlyNavigating || isCurrentlyDownloading}
+                                                    title="Ver informações da ferramenta"
+                                                 >
+                                                    {isCurrentlyNavigating ? (
+                                                        <>
+                                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                            Abrindo...
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Info className="mr-2 h-4 w-4" />
+                                                            Informações
+                                                        </>
+                                                    )}
+                                                </Button>
+                                                 {isLocked ? (
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="border-yellow-500 text-yellow-600 hover:bg-yellow-500/10 hover:text-yellow-700 transition-colors w-full sm:w-auto"
+                                                        onClick={() => router.push('/premium')}
+                                                        disabled={isCurrentlyNavigating || isCurrentlyDownloading}
+                                                    >
+                                                        <Lock className="mr-2 h-4 w-4" />
+                                                         Ver Planos Premium {tool.requiredPlan && tool.requiredPlan !== 'none' ? `(${tool.requiredPlan})` : ''}
+                                                    </Button>
+                                                 ) : (
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => handleDownloadClick(tool)}
+                                                        className="hover:bg-primary hover:text-primary-foreground transition-colors w-full sm:w-auto"
+                                                        disabled={isCurrentlyDownloading || isCurrentlyNavigating}
+                                                    >
+                                                         {isCurrentlyDownloading ? (
+                                                             <>
+                                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                                Baixando...
+                                                             </>
+                                                         ) : (
+                                                             <>
+                                                                <Download className="mr-2 h-4 w-4" />
+                                                                Download
+                                                             </>
+                                                         )}
+                                                    </Button>
+                                                 )}
                                             </div>
                                         </div>
-                                        {/* Action Buttons Container at the bottom */}
-                                        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto flex-shrink-0 mt-auto"> {/* mt-auto pushes to bottom */}
-                                             {/* Information Button */}
-                                            <Button
-                                                variant="secondary"
-                                                size="sm"
-                                                className="hover:bg-accent hover:text-accent-foreground transition-colors w-full sm:w-auto" // Added sm:w-auto
-                                                onClick={() => handleInfoClick(tool.id)}
-                                                disabled={isCurrentlyNavigating || isCurrentlyDownloading} // Disable if navigating or downloading this tool
-                                                title="Ver informações da ferramenta"
-                                             >
-                                                {isCurrentlyNavigating ? (
-                                                    <>
-                                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                        Abrindo...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Info className="mr-2 h-4 w-4" />
-                                                        Informações
-                                                    </>
-                                                )}
-                                            </Button>
-                                             {/* Download / Premium Button */}
-                                             {isLocked ? (
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    className="border-yellow-500 text-yellow-600 hover:bg-yellow-500/10 hover:text-yellow-700 transition-colors w-full sm:w-auto" // Added sm:w-auto
-                                                    onClick={() => router.push('/premium')}
-                                                    disabled={isCurrentlyNavigating || isCurrentlyDownloading}
-                                                >
-                                                    <Lock className="mr-2 h-4 w-4" />
-                                                     {/* Show specific plan required */}
-                                                     Ver Planos Premium {tool.requiredPlan && tool.requiredPlan !== 'none' ? `(${tool.requiredPlan})` : ''}
-                                                </Button>
-                                             ) : (
-                                                // Button now triggers API call instead of direct link
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => handleDownloadClick(tool)}
-                                                    className="hover:bg-primary hover:text-primary-foreground transition-colors w-full sm:w-auto" // Added sm:w-auto
-                                                    disabled={isCurrentlyDownloading || isCurrentlyNavigating} // Disable if downloading this tool or navigating
-                                                >
-                                                     {isCurrentlyDownloading ? (
-                                                         <>
-                                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                            Baixando...
-                                                         </>
-                                                     ) : (
-                                                         <>
-                                                            <Download className="mr-2 h-4 w-4" />
-                                                            Download
-                                                         </>
-                                                     )}
-                                                </Button>
-                                             )}
-                                        </div>
+                                        {tool.images && tool.images[0] && (
+                                            <div className="relative w-24 h-24 sm:w-32 sm:h-32 flex-shrink-0 ml-auto rounded-md overflow-hidden bg-background">
+                                                <Image
+                                                    src={tool.images[0]}
+                                                    alt={`Thumbnail for ${tool.name}`}
+                                                    fill
+                                                    sizes="(max-width: 640px) 96px, 128px"
+                                                    className="object-cover"
+                                                    data-ai-hint="tool image"
+                                                />
+                                            </div>
+                                        )}
                                     </Card>
                                 );
                             })}
