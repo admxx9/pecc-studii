@@ -59,7 +59,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
 
 
   return (
-    <div className="flex h-full w-full bg-secondary/40 rounded-lg border border-border">
+    <div className="flex h-[calc(100vh-var(--header-height)-4rem)] w-full bg-secondary/40 rounded-lg border border-border">
       {/* Channel List Sidebar */}
       <aside className="w-60 flex-shrink-0 bg-card/50 p-2 flex flex-col">
         <h2 className="text-md font-semibold text-foreground px-2 py-1 mb-2">Canais</h2>
@@ -84,7 +84,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
       </aside>
 
       {/* Main Chat Area */}
-      <div className="flex flex-1 flex-col overflow-hidden h-full">
+      <div className="flex flex-1 flex-col overflow-hidden">
         {/* Chat Header */}
         <header className="flex items-center h-14 border-b border-border px-4 flex-shrink-0">
           <Hash className="h-5 w-5 text-muted-foreground" />
@@ -93,7 +93,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
           </h1>
         </header>
 
-        {/* Messages Area - This now grows and scrolls internally */}
+        {/* Messages Area */}
         <div className="flex-1 overflow-hidden">
             <ScrollArea className="h-full p-4">
                 <div className="space-y-4 pr-4">
@@ -119,7 +119,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         </div>
 
 
-        {/* Message Input - This is pushed to the bottom */}
+        {/* Message Input */}
         <div className="p-4 border-t border-border mt-auto flex-shrink-0">
           <form onSubmit={handleSendMessage} className="flex items-center gap-2">
             <Input
