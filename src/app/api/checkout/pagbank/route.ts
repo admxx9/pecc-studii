@@ -17,7 +17,8 @@ export async function POST(request: NextRequest) {
   }
 
   // Use userEmail as a fallback for name to ensure it's never "N/A"
-  const customerName = userName && userName.trim() !== "" ? userName : userEmail;
+  const customerName = userName && userName.trim() !== "" && userName.trim().toLowerCase() !== 'n/a' ? userName : userEmail;
+
 
   const body = {
     customer: {
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
   };
 
   try {
-    const response = await fetch("https://api.pagseguro.com/orders", { // Changed to production URL
+    const response = await fetch("https://sandbox.api.pagseguro.com/orders", { // Using Sandbox URL for tests
       method: "POST",
       headers: {
         "Content-Type": "application/json",
