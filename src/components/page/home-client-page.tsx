@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
@@ -6,6 +5,7 @@ import Header from '@/components/layout/header';
 import Sidebar from '@/components/layout/sidebar';
 import MainContent from '@/components/layout/main-content';
 import ToolsContent from '@/components/layout/tools-content';
+import ChatContent from '@/components/layout/chat-content'; // Import ChatContent
 import AdminPanel from '@/components/layout/admin-panel';
 import SignUpForm from '@/components/auth/sign-up-form';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -57,7 +57,7 @@ export interface UserProfile {
 }
 
 
-export type ActiveTab = 'aulas' | 'ferramentas' | 'admin';
+export type ActiveTab = 'aulas' | 'ferramentas' | 'chat' | 'admin';
 
 const LOGO_URL = "https://i.imgur.com/sXliRZl.png"; // Use the correct Logo URL
 
@@ -669,6 +669,9 @@ export default function HomeClientPage() {
                 </div>
               </>
              )}
+            {!isLoading && activeTab === 'chat' && (
+              <ChatContent userProfile={userProfile} />
+            )}
             {!isLoading && activeTab === 'admin' && userProfile?.isAdmin && (
                 <div className="w-full">
                   <AdminPanel />

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image'; // Import Image component
-import { Search, User, LogOut, Crown, Settings, UserCircle, Bell, Info, CheckCircle, AlertTriangle, Menu, Loader2, LifeBuoy } from 'lucide-react'; // Added LifeBuoy
+import { Search, User, LogOut, Crown, Settings, UserCircle, Bell, Info, CheckCircle, AlertTriangle, Menu, Loader2, LifeBuoy, Hash } from 'lucide-react'; // Added LifeBuoy, Hash
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -314,6 +314,13 @@ export default function Header({
               >
                 Ferramentas
               </Button>
+               <Button
+                variant="ghost"
+                className={getButtonClass('chat')}
+                onClick={() => setActiveTab('chat')}
+              >
+                Chat
+              </Button>
               {isAdmin && (
                 <Button
                   variant="ghost"
@@ -501,6 +508,13 @@ export default function Header({
              >
                Ferramentas
              </Button>
+             <Button
+                variant="ghost"
+                className={cn(getButtonClass('chat'), "justify-start")}
+                onClick={() => { setActiveTab('chat'); setIsMobileMenuOpen(false); }}
+              >
+                Chat
+              </Button>
              {isAdmin && (
                <Button
                  variant="ghost"
