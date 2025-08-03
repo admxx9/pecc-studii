@@ -153,6 +153,17 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
   }, [activeChannel, toast]);
 
 
+  // Scroll to bottom when new messages are added
+  useEffect(() => {
+    if (scrollAreaRef.current) {
+      const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
+    }
+  }, [messages]);
+
+
   // --- Event Handlers ---
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -272,16 +283,6 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             toast({ title: "Erro", description: "Não foi possível salvar o canal.", variant: "destructive" });
         }
     };
-
-  // Scroll to bottom when new messages are added
-  useEffect(() => {
-    if (scrollAreaRef.current) {
-      const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
-      if (viewport) {
-        viewport.scrollTop = viewport.scrollHeight;
-      }
-    }
-  }, [messages]);
 
 
   return (
