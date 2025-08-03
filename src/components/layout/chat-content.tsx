@@ -128,7 +128,23 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
 
   const handleDeleteMessage = async (messageId: string) => {
     if (!db) return;
-    // TODO: Add permission check (is author or admin)
+    
+    const messageToDelete = messages.find(m => m.id === messageId);
+    if (!messageToDelete) return;
+
+    // Permission Check
+    const isOwner = userProfile?.uid === messageToDelete.user.uid;
+    const isAdmin = userProfile?.isAdmin === true;
+
+    if (!isOwner && !isAdmin) {
+         toast({
+            title: "Acesso Negado",
+            description: "Você não tem permissão para excluir esta mensagem.",
+            variant: "destructive",
+        });
+        return;
+    }
+
     const messageRef = doc(db, 'chatChannels', activeChannel, 'messages', messageId);
     try {
       await deleteDoc(messageRef);
@@ -183,7 +199,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
 
 
   return (
-    <div className="flex h-[calc(100vh-var(--header-height)-var(--footer-height,0px)-2rem)] w-full bg-secondary/40 rounded-lg border border-border">
+    <div className="flex h-full w-full bg-secondary/40 rounded-lg border border-border">
       {/* Channel List Sidebar */}
       <aside className="w-60 flex-shrink-0 bg-card/50 p-2 flex flex-col">
         <h2 className="text-md font-semibold text-foreground px-2 py-1 mb-2">Canais</h2>
@@ -231,8 +247,10 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                               <p className="text-muted-foreground text-sm">Seja o primeiro a enviar uma mensagem em #{channels.find(c => c.id === activeChannel)?.name}!</p>
                           </div>
                       ) : (
-                        messages.map(msg => (
-                          <div key={msg.id} id={`message-${msg.id}`} className="group relative flex items-start gap-3 p-2 rounded-md hover:bg-accent/5">
+                        messages.map(msg => {
+                          const canDelete = userProfile?.isAdmin || userProfile?.uid === msg.user.uid;
+                          return (
+                            <div key={msg.id} id={`message-${msg.id}`} className="group relative flex items-start gap-3 p-2 rounded-md hover:bg-accent/5">
                              {/* Message Actions - Appears on hover */}
                              <div className="absolute top-0 right-2 -mt-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                                 <div className="flex items-center gap-1 bg-card border border-border rounded-md shadow-md p-1">
@@ -260,11 +278,15 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                                                 <CopyIcon className="mr-2 h-4 w-4" />
                                                 <span>Copiar Texto</span>
                                             </DropdownMenuItem>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem onSelect={() => handleDeleteMessage(msg.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer">
-                                                <Trash2 className="mr-2 h-4 w-4" />
-                                                <span>Excluir Mensagem</span>
-                                            </DropdownMenuItem>
+                                            {canDelete && (
+                                              <>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem onSelect={() => handleDeleteMessage(msg.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer">
+                                                    <Trash2 className="mr-2 h-4 w-4" />
+                                                    <span>Excluir Mensagem</span>
+                                                </DropdownMenuItem>
+                                              </>
+                                            )}
                                         </DropdownMenuContent>
                                     </DropdownMenu>
                                 </div>
@@ -295,7 +317,8 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                                 <p className="text-sm text-foreground/90">{msg.text}</p>
                             </div>
                           </div>
-                        ))
+                          )
+                        })
                       )}
                     </div>
                 </div>
@@ -336,5 +359,3 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     </div>
   );
 }
-
-    
