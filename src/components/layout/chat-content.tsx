@@ -7,9 +7,20 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Hash, Send, UserCircle, MessageSquareReply, Smile, MoreHorizontal, Loader2, X, Trash2, Copy as CopyIcon, Settings, Plus, GripVertical } from 'lucide-react';
+import { Hash, Send, UserCircle, MessageSquareReply, Smile, MoreHorizontal, Loader2, X, Trash2, Copy as CopyIcon, Settings, Plus, GripVertical, Edit } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
     Select,
     SelectContent,
@@ -96,10 +107,12 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     const [isChannelModalOpen, setIsChannelModalOpen] = useState(false);
     const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
     const [editingChannel, setEditingChannel] = useState<{ categoryId: string, channel?: ChatChannel } | null>(null);
+    const [editingCategory, setEditingCategory] = useState<ChatCategory | null>(null);
     const [channelName, setChannelName] = useState('');
     const [selectedCategoryId, setSelectedCategoryId] = useState('');
     const [newCategoryName, setNewCategoryName] = useState('');
     const [newCategoryOrder, setNewCategoryOrder] = useState(0);
+    const [itemToDelete, setItemToDelete] = useState<{ type: 'channel' | 'category', item: ChatChannel | ChatCategory } | null>(null);
 
 
     // --- Data Fetching ---
@@ -266,10 +279,11 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         setSelectedCategoryId(channel?.categoryId || categoryId || '');
         setIsChannelModalOpen(true);
     };
-    
-    const handleOpenCategoryModal = () => {
-        setNewCategoryName('');
-        setNewCategoryOrder(categories.length + 1); // Default to next order
+
+    const handleOpenCategoryModal = (category?: ChatCategory) => {
+        setEditingCategory(category || null);
+        setNewCategoryName(category?.name || '');
+        setNewCategoryOrder(category?.order || categories.length + 1);
         setIsCategoryModalOpen(true);
     };
 
@@ -306,7 +320,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             toast({ title: "Erro", description: "Não foi possível salvar o canal.", variant: "destructive" });
         }
     };
-    
+
     const handleSaveCategory = async () => {
         if (!newCategoryName.trim() || !db) {
             toast({ title: "Erro", description: "Nome da categoria é obrigatório.", variant: "destructive" });
@@ -314,12 +328,19 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         }
 
         try {
-            await addDoc(collection(db, 'chatCategories'), {
-                name: newCategoryName.trim(),
-                order: newCategoryOrder,
-                createdAt: serverTimestamp(),
-            });
-            toast({ title: "Categoria Criada!" });
+            if (editingCategory) {
+                const categoryRef = doc(db, 'chatCategories', editingCategory.id);
+                await updateDoc(categoryRef, { name: newCategoryName.trim(), order: newCategoryOrder });
+                toast({ title: "Categoria Atualizada!" });
+            } else {
+                await addDoc(collection(db, 'chatCategories'), {
+                    name: newCategoryName.trim(),
+                    order: newCategoryOrder,
+                    createdAt: serverTimestamp(),
+                });
+                toast({ title: "Categoria Criada!" });
+            }
+
 
             // Refetch categories to update the list
             const categoriesSnapshot = await getDocs(query(collection(db, 'chatCategories'), orderBy('order', 'asc')));
@@ -329,9 +350,50 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             setIsCategoryModalOpen(false);
             setNewCategoryName('');
             setNewCategoryOrder(0);
+            setEditingCategory(null);
         } catch (error) {
             console.error("Error saving category:", error);
             toast({ title: "Erro", description: "Não foi possível salvar a categoria.", variant: "destructive" });
+        }
+    };
+    
+    const handleDeleteConfirmation = async () => {
+        if (!itemToDelete || !db) return;
+
+        const { type, item } = itemToDelete;
+        
+        try {
+            if (type === 'channel') {
+                const channel = item as ChatChannel;
+                // TODO: Also delete all messages within the channel in a batch
+                await deleteDoc(doc(db, 'chatChannels', channel.id));
+                setChannels(prev => prev.filter(c => c.id !== channel.id));
+                toast({ title: "Canal Excluído", description: `O canal #${channel.name} foi removido.` });
+            } else if (type === 'category') {
+                const category = item as ChatCategory;
+                const batch = writeBatch(db);
+
+                // Find and delete channels in this category
+                const channelsToDelete = channels.filter(c => c.categoryId === category.id);
+                channelsToDelete.forEach(c => {
+                    // TODO: Also delete all messages within each channel
+                    batch.delete(doc(db, 'chatChannels', c.id));
+                });
+
+                // Delete the category itself
+                batch.delete(doc(db, 'chatCategories', category.id));
+
+                await batch.commit();
+
+                setCategories(prev => prev.filter(c => c.id !== category.id));
+                setChannels(prev => prev.filter(c => c.categoryId !== category.id));
+                toast({ title: "Categoria Excluída", description: `A categoria ${category.name} e todos os seus canais foram removidos.` });
+            }
+        } catch (error) {
+             console.error(`Error deleting ${type}:`, error);
+            toast({ title: "Erro", description: `Não foi possível excluir.`, variant: "destructive" });
+        } finally {
+            setItemToDelete(null);
         }
     };
 
@@ -351,13 +413,10 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent>
-                            <DropdownMenuItem onSelect={handleOpenChannelModal}>Criar Canal</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={handleOpenCategoryModal}>Criar Categoria</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => handleOpenChannelModal()}>Criar Canal</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => handleOpenCategoryModal()}>Criar Categoria</DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsManageCategoriesOpen(true)}>
-                        <Settings className="h-4 w-4" />
-                    </Button>
                 </div>
             )}
         </header>
@@ -370,27 +429,54 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
           ) : (
             <Accordion type="multiple" defaultValue={categories.map(c => c.id)} className="w-full">
                 {categories.map(category => (
-                    <AccordionItem value={category.id} key={category.id} className="border-b-0">
+                    <AccordionItem value={category.id} key={category.id} className="border-b-0 group">
                         <div className="flex items-center justify-between group">
                             <AccordionTrigger className="flex-1 text-xs font-semibold uppercase text-muted-foreground hover:text-foreground py-1 px-2">
                                 {category.name}
                             </AccordionTrigger>
+                            {userProfile?.isAdmin && (
+                                 <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100">
+                                            <Settings className="h-3 w-3" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent>
+                                        <DropdownMenuItem onSelect={() => handleOpenCategoryModal(category)}>Editar Categoria</DropdownMenuItem>
+                                        <DropdownMenuItem onSelect={() => setItemToDelete({ type: 'category', item: category })} className="text-destructive">Excluir Categoria</DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            )}
                         </div>
                         <AccordionContent className="pl-2 pb-1">
                             <nav className="space-y-1">
                                 {channels.filter(c => c.categoryId === category.id).map(channel => (
-                                    <Button
-                                        key={channel.id}
-                                        variant="ghost"
-                                        onClick={() => handleChannelClick(channel)}
-                                        className={cn(
-                                            'w-full justify-start text-muted-foreground',
-                                            activeChannel?.id === channel.id && 'bg-accent text-accent-foreground'
+                                    <div key={channel.id} className="flex items-center group/channel">
+                                        <Button
+                                            variant="ghost"
+                                            onClick={() => handleChannelClick(channel)}
+                                            className={cn(
+                                                'w-full justify-start text-muted-foreground',
+                                                activeChannel?.id === channel.id && 'bg-accent text-accent-foreground'
+                                            )}
+                                        >
+                                            <Hash className="mr-2 h-4 w-4" />
+                                            {channel.name}
+                                        </Button>
+                                         {userProfile?.isAdmin && (
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover/channel:opacity-100">
+                                                        <Settings className="h-3 w-3" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent>
+                                                    <DropdownMenuItem onSelect={() => handleOpenChannelModal(channel.categoryId, channel)}>Editar Canal</DropdownMenuItem>
+                                                    <DropdownMenuItem onSelect={() => setItemToDelete({ type: 'channel', item: channel })} className="text-destructive">Excluir Canal</DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         )}
-                                    >
-                                        <Hash className="mr-2 h-4 w-4" />
-                                        {channel.name}
-                                    </Button>
+                                    </div>
                                 ))}
                             </nav>
                         </AccordionContent>
@@ -574,7 +660,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             </form>
         </div>
       </div>
-      
+
        {/* Channel Modal */}
        <Dialog open={isChannelModalOpen} onOpenChange={setIsChannelModalOpen}>
             <DialogContent>
@@ -616,12 +702,12 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                 </DialogFooter>
             </DialogContent>
         </Dialog>
-        
+
         {/* Category Modal */}
         <Dialog open={isCategoryModalOpen} onOpenChange={setIsCategoryModalOpen}>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>Criar Nova Categoria</DialogTitle>
+                    <DialogTitle>{editingCategory ? 'Editar Categoria' : 'Criar Nova Categoria'}</DialogTitle>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                     <div className="grid grid-cols-4 items-center gap-4">
@@ -653,6 +739,25 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+        
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        {itemToDelete?.type === 'channel' && `Tem certeza que quer excluir o canal #${(itemToDelete.item as ChatChannel).name}? Esta ação não pode ser desfeita.`}
+                        {itemToDelete?.type === 'category' && `Tem certeza que quer excluir a categoria ${(itemToDelete.item as ChatCategory).name}? TODOS os canais dentro dela serão excluídos permanentemente.`}
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setItemToDelete(null)}>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeleteConfirmation} className="bg-destructive hover:bg-destructive/90">Excluir</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
     </div>
   );
 }
+
+    
