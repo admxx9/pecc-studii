@@ -15,10 +15,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from '@/lib/utils';
 import type { UserProfile } from '@/components/page/home-client-page';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, Timestamp, doc, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, Timestamp, doc, deleteDoc, updateDoc, arrayUnion, arrayRemove, getDoc } from 'firebase/firestore';
 import { useToast } from "@/hooks/use-toast";
 
 
@@ -46,11 +51,15 @@ interface ChatMessage {
   };
   createdAt: Timestamp; // Using Firestore Timestamp
   replyTo?: ReplyInfo | null;
+  reactions?: { [emoji: string]: string[] }; // Map of emoji to array of user UIDs
 }
 
 interface ChatContentProps {
   userProfile: UserProfile | null;
 }
+
+const EMOJI_LIST = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🤔'];
+
 
 export default function ChatContent({ userProfile }: ChatContentProps) {
   const [activeChannel, setActiveChannel] = useState('1');
@@ -108,6 +117,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
           text: replyingTo.text,
           authorName: replyingTo.user.name,
         } : null,
+        reactions: {}, // Initialize with empty reactions
       });
       setNewMessage('');
       setReplyingTo(null); // Clear reply state after sending
@@ -170,6 +180,38 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             console.error('Failed to copy text: ', err);
             toast({ title: "Erro", description: "Não foi possível copiar o texto.", variant: "destructive"});
         });
+    };
+
+    const handleReaction = async (message: ChatMessage, emoji: string) => {
+      if (!userProfile || !db) return;
+  
+      const messageRef = doc(db, 'chatChannels', activeChannel, 'messages', message.id);
+      const currentReactions = message.reactions || {};
+      const usersWhoReacted = currentReactions[emoji] || [];
+      const userHasReacted = usersWhoReacted.includes(userProfile.uid);
+  
+      const fieldPath = `reactions.${emoji}`;
+  
+      try {
+        if (userHasReacted) {
+          // User has reacted, so remove their reaction
+          await updateDoc(messageRef, {
+            [fieldPath]: arrayRemove(userProfile.uid)
+          });
+        } else {
+          // User has not reacted, so add their reaction
+          await updateDoc(messageRef, {
+            [fieldPath]: arrayUnion(userProfile.uid)
+          });
+        }
+      } catch (error) {
+        console.error("Error updating reaction:", error);
+        toast({
+          title: "Erro",
+          description: "Não foi possível adicionar/remover a reação.",
+          variant: "destructive",
+        });
+      }
     };
 
 
@@ -256,10 +298,30 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                          {/* Message Actions - Appears on hover */}
                          <div className="absolute top-0 right-2 -mt-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                             <div className="flex items-center gap-1 bg-card border border-border rounded-md shadow-md p-1">
-                               <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
-                                 <Smile className="h-4 w-4" />
-                                 <span className="sr-only">Adicionar Reação</span>
-                               </Button>
+                               <Popover>
+                                 <PopoverTrigger asChild>
+                                   <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
+                                     <Smile className="h-4 w-4" />
+                                     <span className="sr-only">Adicionar Reação</span>
+                                   </Button>
+                                 </PopoverTrigger>
+                                 <PopoverContent className="w-auto p-1 bg-card border-border">
+                                   <div className="flex gap-1">
+                                     {EMOJI_LIST.map(emoji => (
+                                       <Button
+                                         key={emoji}
+                                         variant="ghost"
+                                         size="icon"
+                                         className="h-7 w-7 text-lg rounded-full"
+                                         onClick={() => handleReaction(msg, emoji)}
+                                       >
+                                         {emoji}
+                                       </Button>
+                                     ))}
+                                   </div>
+                                 </PopoverContent>
+                               </Popover>
+
                                 <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground" onClick={() => handleReplyClick(msg)}>
                                  <MessageSquareReply className="h-4 w-4" />
                                   <span className="sr-only">Responder</span>
@@ -317,6 +379,30 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                                 <p className="text-xs text-muted-foreground">{formatDate(msg.createdAt)}</p>
                             </div>
                             <p className="text-sm text-foreground/90">{msg.text}</p>
+                            {/* Reactions Display */}
+                             {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                               <div className="mt-1 flex flex-wrap gap-1">
+                                 {Object.entries(msg.reactions).map(([emoji, uids]) => {
+                                   if (uids.length === 0) return null;
+                                   const userHasReacted = userProfile && uids.includes(userProfile.uid);
+                                   return (
+                                     <Button
+                                       key={emoji}
+                                       variant="outline"
+                                       size="sm"
+                                       className={cn(
+                                         "h-auto px-1.5 py-0.5 text-xs rounded-full border-accent/50 bg-accent/20 hover:bg-accent/40",
+                                         userHasReacted && "border-primary bg-primary/20"
+                                       )}
+                                       onClick={() => handleReaction(msg, emoji)}
+                                     >
+                                       <span className="text-sm mr-1">{emoji}</span>
+                                       <span className="font-mono text-xs">{uids.length}</span>
+                                     </Button>
+                                   );
+                                 })}
+                               </div>
+                             )}
                         </div>
                       </div>
                       )
@@ -360,3 +446,4 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     </div>
   );
 }
+
