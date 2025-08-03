@@ -84,7 +84,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
       </aside>
 
       {/* Main Chat Area */}
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col overflow-hidden">
         {/* Chat Header */}
         <header className="flex items-center h-14 border-b border-border px-4 flex-shrink-0">
           <Hash className="h-5 w-5 text-muted-foreground" />
