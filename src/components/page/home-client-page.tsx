@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
@@ -566,24 +567,28 @@ export default function HomeClientPage() {
     }
 
     // Logged-in user view
+    const showSidebar = activeTab === 'aulas' || activeTab === 'ferramentas';
+
     return (
         <div className={cn(
             "flex flex-col md:flex-row flex-1 overflow-hidden",
              "md:space-x-4" // Keep space for desktop, reduced from 6
           )}>
              {/* Desktop Sidebar */}
-            <div className="hidden md:block w-full md:w-72 lg:w-80 flex-shrink-0 md:pl-4"> {/* Added left padding for desktop */}
-                <Sidebar
-                    activeTab={activeTab}
-                    selectedToolCategory={selectedToolCategory}
-                    setSelectedToolCategory={setSelectedToolCategory}
-                    selectedLessonId={selectedLessonId}
-                    setSelectedLessonId={handleSelectLesson}
-                    lessons={lessons}
-                    progressPercentage={progressPercentage}
-                    isLoading={isLoading}
-                />
-            </div>
+            {showSidebar && (
+                <div className="hidden md:block w-full md:w-72 lg:w-80 flex-shrink-0 md:pl-4"> {/* Added left padding for desktop */}
+                    <Sidebar
+                        activeTab={activeTab}
+                        selectedToolCategory={selectedToolCategory}
+                        setSelectedToolCategory={setSelectedToolCategory}
+                        selectedLessonId={selectedLessonId}
+                        setSelectedLessonId={handleSelectLesson}
+                        lessons={lessons}
+                        progressPercentage={progressPercentage}
+                        isLoading={isLoading}
+                    />
+                </div>
+            )}
 
           {/* Main Content Area */}
           <div id="main-content" className="flex-1 overflow-y-auto flex flex-col p-2 md:p-0 md:pr-4"> {/* Added ID and padding adjustments */}
@@ -627,35 +632,39 @@ export default function HomeClientPage() {
                   ) : null } {/* Don't show anything if error occurred */}
 
                   {/* Mobile Sidebar */}
-                  <div className="block md:hidden mt-4 p-2"> {/* Sidebar for mobile below content */}
-                     <Sidebar
-                        activeTab={activeTab}
-                        selectedToolCategory={selectedToolCategory}
-                        setSelectedToolCategory={setSelectedToolCategory}
-                        selectedLessonId={selectedLessonId}
-                        setSelectedLessonId={handleSelectLesson}
-                        lessons={lessons}
-                        progressPercentage={progressPercentage}
-                        isLoading={isLoading}
-                     />
-                  </div>
+                  {showSidebar && (
+                      <div className="block md:hidden mt-4 p-2"> {/* Sidebar for mobile below content */}
+                        <Sidebar
+                            activeTab={activeTab}
+                            selectedToolCategory={selectedToolCategory}
+                            setSelectedToolCategory={setSelectedToolCategory}
+                            selectedLessonId={selectedLessonId}
+                            setSelectedLessonId={handleSelectLesson}
+                            lessons={lessons}
+                            progressPercentage={progressPercentage}
+                            isLoading={isLoading}
+                        />
+                      </div>
+                  )}
                 </>
              )}
              {!isLoading && activeTab === 'ferramentas' && (
               <>
                  {/* Mobile Sidebar */}
-                 <div className="block md:hidden mb-4 p-2"> {/* Sidebar for mobile above content */}
-                    <Sidebar
-                        activeTab={activeTab}
-                        selectedToolCategory={selectedToolCategory}
-                        setSelectedToolCategory={setSelectedToolCategory}
-                        selectedLessonId={selectedLessonId}
-                        setSelectedLessonId={handleSelectLesson}
-                        lessons={lessons}
-                        progressPercentage={progressPercentage}
-                        isLoading={isLoading}
-                    />
-                 </div>
+                 {showSidebar && (
+                    <div className="block md:hidden mb-4 p-2"> {/* Sidebar for mobile above content */}
+                        <Sidebar
+                            activeTab={activeTab}
+                            selectedToolCategory={selectedToolCategory}
+                            setSelectedToolCategory={setSelectedToolCategory}
+                            selectedLessonId={selectedLessonId}
+                            setSelectedLessonId={handleSelectLesson}
+                            lessons={lessons}
+                            progressPercentage={progressPercentage}
+                            isLoading={isLoading}
+                        />
+                    </div>
+                 )}
                  <div className="w-full">
                    {/* Wrap ToolsContent in Suspense as it uses useSearchParams */}
                    <Suspense fallback={ // Add Suspense here
