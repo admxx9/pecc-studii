@@ -94,9 +94,12 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     // State for modals
     const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false);
     const [isChannelModalOpen, setIsChannelModalOpen] = useState(false);
+    const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
     const [editingChannel, setEditingChannel] = useState<{ categoryId: string, channel?: ChatChannel } | null>(null);
     const [channelName, setChannelName] = useState('');
     const [selectedCategoryId, setSelectedCategoryId] = useState('');
+    const [newCategoryName, setNewCategoryName] = useState('');
+    const [newCategoryOrder, setNewCategoryOrder] = useState(0);
 
 
     // --- Data Fetching ---
@@ -263,6 +266,12 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         setSelectedCategoryId(channel?.categoryId || categoryId || '');
         setIsChannelModalOpen(true);
     };
+    
+    const handleOpenCategoryModal = () => {
+        setNewCategoryName('');
+        setNewCategoryOrder(categories.length + 1); // Default to next order
+        setIsCategoryModalOpen(true);
+    };
 
     const handleSaveChannel = async () => {
         if (!channelName.trim() || !selectedCategoryId || !db) {
@@ -297,6 +306,34 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             toast({ title: "Erro", description: "Não foi possível salvar o canal.", variant: "destructive" });
         }
     };
+    
+    const handleSaveCategory = async () => {
+        if (!newCategoryName.trim() || !db) {
+            toast({ title: "Erro", description: "Nome da categoria é obrigatório.", variant: "destructive" });
+            return;
+        }
+
+        try {
+            await addDoc(collection(db, 'chatCategories'), {
+                name: newCategoryName.trim(),
+                order: newCategoryOrder,
+                createdAt: serverTimestamp(),
+            });
+            toast({ title: "Categoria Criada!" });
+
+            // Refetch categories to update the list
+            const categoriesSnapshot = await getDocs(query(collection(db, 'chatCategories'), orderBy('order', 'asc')));
+            const fetchedCategories = categoriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatCategory[];
+            setCategories(fetchedCategories);
+
+            setIsCategoryModalOpen(false);
+            setNewCategoryName('');
+            setNewCategoryOrder(0);
+        } catch (error) {
+            console.error("Error saving category:", error);
+            toast({ title: "Erro", description: "Não foi possível salvar a categoria.", variant: "destructive" });
+        }
+    };
 
 
   return (
@@ -307,9 +344,17 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             <h2 className="text-md font-semibold text-foreground">Canais</h2>
             {userProfile?.isAdmin && (
                 <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleOpenChannelModal()}>
-                        <Plus className="h-4 w-4" />
-                    </Button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                             <Button variant="ghost" size="icon" className="h-6 w-6">
+                                <Plus className="h-4 w-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                            <DropdownMenuItem onSelect={handleOpenChannelModal}>Criar Canal</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={handleOpenCategoryModal}>Criar Categoria</DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsManageCategoriesOpen(true)}>
                         <Settings className="h-4 w-4" />
                     </Button>
@@ -571,9 +616,43 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+        
+        {/* Category Modal */}
+        <Dialog open={isCategoryModalOpen} onOpenChange={setIsCategoryModalOpen}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Criar Nova Categoria</DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="category-name" className="text-right">Nome</Label>
+                        <Input
+                            id="category-name"
+                            value={newCategoryName}
+                            onChange={(e) => setNewCategoryName(e.target.value)}
+                            className="col-span-3"
+                            placeholder="ex: Geral"
+                        />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="category-order" className="text-right">Ordem</Label>
+                        <Input
+                            id="category-order"
+                            type="number"
+                            value={newCategoryOrder}
+                            onChange={(e) => setNewCategoryOrder(Number(e.target.value))}
+                            className="col-span-3"
+                        />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <DialogClose asChild>
+                        <Button type="button" variant="secondary">Cancelar</Button>
+                    </DialogClose>
+                    <Button type="button" onClick={handleSaveCategory}>Salvar Categoria</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </div>
   );
 }
-
-
-
