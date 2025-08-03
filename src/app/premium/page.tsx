@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Check, ArrowLeft, X, Gift, Loader2, Copy } from 'lucide-react'; // Added Gift icon
+import { Check, ArrowLeft, X, Gift, Loader2, Copy } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
@@ -52,6 +52,7 @@ export default function PremiumPage() {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [redemptionCode, setRedemptionCode] = useState('');
+  const [view, setView] = useState<'plans' | 'redeem'>('plans'); // State to control view
   const { toast } = useToast();
 
   useEffect(() => {
@@ -167,9 +168,14 @@ export default function PremiumPage() {
 
       <main className="flex-1 container mx-auto py-12 px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-12">
-              <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-3">Desbloqueie Todo o Potencial</h2>
+              <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-3">
+                {view === 'plans' ? 'Desbloqueie Todo o Potencial' : 'Ative Seu Acesso'}
+              </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                 Obtenha um código de resgate em nosso Discord e insira abaixo para ativar seu plano.
+                 {view === 'plans'
+                    ? 'Obtenha um código de resgate em nosso Discord para ativar seu plano.'
+                    : 'Insira o código recebido para ativar os benefícios do seu plano premium.'
+                 }
               </p>
                <Button variant="link" onClick={handleGoToPurchaseInfo} className="text-primary mt-2 text-lg">
                   <Gift className="mr-2 h-5 w-5"/>
@@ -177,80 +183,92 @@ export default function PremiumPage() {
                </Button>
             </div>
 
-             {/* Redemption Code Input Section */}
-             <Card className="max-w-xl mx-auto bg-card border-border shadow-lg mb-12">
-                <CardHeader>
-                    <CardTitle>Resgatar Código</CardTitle>
-                    <CardDescription>Insira seu código premium para ativar seu plano.</CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-col sm:flex-row gap-2">
-                     <Input
-                        type="text"
-                        placeholder="SEU-CODIGO-AQUI"
-                        value={redemptionCode}
-                        onChange={(e) => setRedemptionCode(e.target.value)}
-                        className="flex-grow bg-input text-base"
-                        disabled={isLoading}
-                    />
-                    <Button
-                        onClick={handleRedeemCode}
-                        disabled={isLoading}
-                        className="w-full sm:w-auto bg-primary hover:bg-primary/90"
-                    >
-                        {isLoading ? (
-                            <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Resgatando...
-                            </>
-                        ) : (
-                            "Ativar Plano"
-                        )}
-                    </Button>
-                </CardContent>
-            </Card>
-
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 md:max-w-4xl md:mx-auto">
-              {plans.map((plan) => (
-                <Card
-                  key={plan.id}
-                  className={`flex flex-col bg-card border rounded-lg shadow-lg overflow-hidden ${plan.highlight
-                    ? 'border-primary border-2' // Removed scale-105 for better layout
-                    : 'border-border'} hover:shadow-xl transition-all duration-300`}
-                >
-                  <CardHeader className={`p-6 ${plan.highlight ? 'bg-primary/10' : 'bg-secondary/50'}`}>
-                    <CardTitle className="text-2xl font-semibold text-foreground text-center">{plan.name}</CardTitle>
-                    <CardDescription className="text-center text-muted-foreground mt-1">
-                      <span className="text-3xl font-bold text-foreground">R$ {plan.price.toFixed(2).replace('.', ',')}</span>
-                      <span className="text-sm">{plan.period}</span>
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="p-6 flex-grow flex flex-col justify-between">
-                    <ul className="space-y-3 mb-6">
-                       {plan.features.map((feature, index) => (
-                        <li key={index} className="flex items-start">
-                           {feature.included ? (
-                             <Check className="h-5 w-5 text-green-500 mr-2 flex-shrink-0 mt-0.5"/>
-                           ) : (
-                             <X className="h-5 w-5 text-red-500 mr-2 flex-shrink-0 mt-0.5"/>
-                           )}
-                           <span className={`text-sm ${feature.included ? 'text-muted-foreground' : 'text-muted-foreground/70 line-through'}`}>
-                            {feature.text}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  <Button
-                    onClick={handleGoToPurchaseInfo}
-                    variant={plan.highlight ? 'default' : 'outline'}
-                    className={`w-full mt-auto ${plan.highlight ? 'bg-primary hover:bg-primary/90 text-primary-foreground' : 'border-border text-muted-foreground hover:bg-accent/10'}`}
-                  >
-                     {plan.cta}
-                  </Button>
-                  </CardContent>
+             {/* Conditional Rendering based on 'view' state */}
+             {view === 'redeem' ? (
+                <Card className="max-w-xl mx-auto bg-card border-border shadow-lg mb-12 animate-in fade-in-50 slide-in-from-bottom-5">
+                    <CardHeader>
+                        <CardTitle>Resgatar Código</CardTitle>
+                        <CardDescription>Insira seu código premium para ativar seu plano.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex flex-col gap-2">
+                         <Input
+                            type="text"
+                            placeholder="SEU-CODIGO-AQUI"
+                            value={redemptionCode}
+                            onChange={(e) => setRedemptionCode(e.target.value)}
+                            className="flex-grow bg-input text-base"
+                            disabled={isLoading}
+                        />
+                        <div className="flex flex-col sm:flex-row gap-2 mt-2">
+                            <Button
+                                variant="outline"
+                                onClick={() => setView('plans')}
+                                disabled={isLoading}
+                                className="w-full sm:w-auto"
+                            >
+                                <ArrowLeft className="mr-2 h-4 w-4"/>
+                                Voltar
+                            </Button>
+                            <Button
+                                onClick={handleRedeemCode}
+                                disabled={isLoading}
+                                className="w-full sm:w-auto bg-primary hover:bg-primary/90 flex-grow"
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Resgatando...
+                                    </>
+                                ) : (
+                                    "Ativar Plano"
+                                )}
+                            </Button>
+                        </div>
+                    </CardContent>
                 </Card>
-              ))}
-            </div>
+             ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 md:max-w-4xl md:mx-auto">
+                {plans.map((plan) => (
+                    <Card
+                    key={plan.id}
+                    className={`flex flex-col bg-card border rounded-lg shadow-lg overflow-hidden ${plan.highlight
+                        ? 'border-primary border-2'
+                        : 'border-border'} hover:shadow-xl transition-all duration-300`}
+                    >
+                    <CardHeader className={`p-6 ${plan.highlight ? 'bg-primary/10' : 'bg-secondary/50'}`}>
+                        <CardTitle className="text-2xl font-semibold text-foreground text-center">{plan.name}</CardTitle>
+                        <CardDescription className="text-center text-muted-foreground mt-1">
+                        <span className="text-3xl font-bold text-foreground">R$ {plan.price.toFixed(2).replace('.', ',')}</span>
+                        <span className="text-sm">{plan.period}</span>
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-6 flex-grow flex flex-col justify-between">
+                        <ul className="space-y-3 mb-6">
+                        {plan.features.map((feature, index) => (
+                            <li key={index} className="flex items-start">
+                            {feature.included ? (
+                                <Check className="h-5 w-5 text-green-500 mr-2 flex-shrink-0 mt-0.5"/>
+                            ) : (
+                                <X className="h-5 w-5 text-red-500 mr-2 flex-shrink-0 mt-0.5"/>
+                            )}
+                            <span className={`text-sm ${feature.included ? 'text-muted-foreground' : 'text-muted-foreground/70 line-through'}`}>
+                                {feature.text}
+                            </span>
+                            </li>
+                        ))}
+                        </ul>
+                    <Button
+                        onClick={() => setView('redeem')}
+                        variant={plan.highlight ? 'default' : 'outline'}
+                        className={`w-full mt-auto ${plan.highlight ? 'bg-primary hover:bg-primary/90 text-primary-foreground' : 'border-border text-muted-foreground hover:bg-accent/10'}`}
+                    >
+                        {plan.cta}
+                    </Button>
+                    </CardContent>
+                    </Card>
+                ))}
+                </div>
+             )}
       </main>
     </div>
   );
