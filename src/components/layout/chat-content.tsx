@@ -102,7 +102,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         </header>
 
         {/* Messages Area */}
-        <div className="flex-1 overflow-hidden p-4 flex flex-col-reverse">
+        <div className="flex-1 overflow-hidden p-4 flex flex-col justify-end">
             <ScrollArea className="h-full" ref={scrollAreaRef}>
                 <div className="space-y-4 pr-4">
                 {messages[activeChannel as keyof typeof messages].map(msg => (
