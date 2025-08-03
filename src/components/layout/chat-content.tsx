@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,6 +38,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
   const [activeChannel, setActiveChannel] = useState('1');
   const [messages, setMessages] = useState(initialMessages);
   const [newMessage, setNewMessage] = useState('');
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,9 +58,16 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     setNewMessage('');
   };
 
+   // Scroll to bottom when new messages are added
+  useEffect(() => {
+    if (scrollAreaRef.current) {
+      scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
+    }
+  }, [messages, activeChannel]);
+
 
   return (
-    <div className="flex h-[calc(100vh-var(--header-height)-4rem)] w-full bg-secondary/40 rounded-lg border border-border">
+    <div className="flex h-[calc(100vh-var(--header-height)-2rem)] w-full bg-secondary/40 rounded-lg border border-border">
       {/* Channel List Sidebar */}
       <aside className="w-60 flex-shrink-0 bg-card/50 p-2 flex flex-col">
         <h2 className="text-md font-semibold text-foreground px-2 py-1 mb-2">Canais</h2>
@@ -94,8 +102,8 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         </header>
 
         {/* Messages Area */}
-        <div className="flex-1 overflow-hidden">
-            <ScrollArea className="h-full p-4">
+        <div className="flex-1 overflow-hidden p-4 flex flex-col-reverse">
+            <ScrollArea className="h-full" ref={scrollAreaRef}>
                 <div className="space-y-4 pr-4">
                 {messages[activeChannel as keyof typeof messages].map(msg => (
                     <div key={msg.id} className="flex items-start gap-3">
