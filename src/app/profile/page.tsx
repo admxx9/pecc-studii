@@ -5,19 +5,20 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image'; // Import next/image
 import Link from 'next/link'; // Import Link
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore'; // Import updateDoc
 import { auth, db } from '@/lib/firebase';
 import Header from '@/components/layout/header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { User as UserIcon, Mail, Edit, Crown, ArrowLeft, Star, Upload } from 'lucide-react'; // Import Star icon, Upload
+import { User as UserIcon, Mail, Edit, Crown, ArrowLeft, Star, Upload, RefreshCw, Loader2 } from 'lucide-react'; // Import Star icon, Upload
 import UpdateProfileForm from '@/components/profile/update-profile-form';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge'; // Import Badge
 import { ranks } from '@/config/ranks';
 import { cn } from '@/lib/utils'; // Import cn
+import { useToast } from '@/hooks/use-toast'; // Import useToast
 
 export interface UserProfileData {
     displayName: string;
@@ -36,11 +37,14 @@ export default function ProfilePage() {
     const [profile, setProfile] = useState<UserProfileData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false); // State for the edit dialog
+    const [isUpdatingBanner, setIsUpdatingBanner] = useState(false); // State for banner update
     const router = useRouter();
+    const { toast } = useToast();
+
+    const defaultBannerUrl = 'https://i.imgur.com/VmlfAGR.jpeg';
 
     const fetchUserProfile = useCallback(async (userId: string) => {
         if (!db) return null;
-        const defaultBannerUrl = 'https://i.imgur.com/VmlfAGR.jpeg';
         const userDocRef = doc(db, 'users', userId);
         try {
             const docSnap = await getDoc(userDocRef);
@@ -106,6 +110,33 @@ export default function ProfilePage() {
         setIsEditing(false); // Close dialog after update
     };
 
+    const handleUpdateBanner = async () => {
+        if (!user || !db) {
+            toast({ title: "Erro", description: "Você precisa estar logado para atualizar.", variant: "destructive" });
+            return;
+        }
+        setIsUpdatingBanner(true);
+        const userDocRef = doc(db, "users", user.uid);
+        try {
+            await updateDoc(userDocRef, {
+                bannerURL: defaultBannerUrl
+            });
+            // Optimistically update the local state
+            setProfile(prev => prev ? { ...prev, bannerURL: defaultBannerUrl } : null);
+            toast({
+                title: "Banner Atualizado!",
+                description: "Seu banner de perfil foi atualizado para o novo padrão.",
+                variant: "default",
+                className: "bg-green-600 border-green-600 text-white"
+            });
+        } catch (error: any) {
+            console.error("Error updating banner:", error);
+            toast({ title: "Erro", description: "Não foi possível atualizar o banner.", variant: "destructive" });
+        } finally {
+            setIsUpdatingBanner(false);
+        }
+    };
+
 
     if (isLoading || !user) {
         return (
@@ -161,7 +192,25 @@ export default function ProfilePage() {
                          ) : (
                             <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-secondary to-accent/10"></div> // Placeholder gradient
                          )}
-                         {/* Placeholder for Edit Banner Button if needed later */}
+                         {/* Temporary Banner Update Button */}
+                         {profile?.bannerURL !== defaultBannerUrl && (
+                             <div className="absolute top-2 right-2">
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="bg-background/80 backdrop-blur-sm text-xs"
+                                    onClick={handleUpdateBanner}
+                                    disabled={isUpdatingBanner}
+                                >
+                                    {isUpdatingBanner ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <RefreshCw className="mr-2 h-4 w-4" />
+                                    )}
+                                    Atualizar Banner
+                                </Button>
+                             </div>
+                         )}
                     </div>
 
                     {/* Profile Info Section */}
