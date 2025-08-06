@@ -1,14 +1,15 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import Image from 'next/image';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; // Import Avatar components
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
     Form,
     FormControl,
@@ -28,7 +29,8 @@ import { auth, db } from "@/lib/firebase"; // Import auth and db
 import { updateProfile, User } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, User as UserIcon } from 'lucide-react'; // Import Loader2 and UserIcon
+import { Loader2 } from 'lucide-react'; // Import Loader2
+import { cn } from '@/lib/utils'; // Import cn
 
 // Interface now includes bannerURL
 interface UserProfileData {
@@ -48,51 +50,39 @@ interface UpdateProfileFormProps {
     setOpen: (open: boolean) => void;
 }
 
-// Zod schema for validation - includes photoURL and bannerURL as optional URL strings
+// Pre-defined avatars
+const predefinedAvatars = [
+    { id: 'avatar1', url: 'https://i.ibb.co/VGBd4FG/Chat-GPT-Image-2-de-ago-de-2025-15-33-39.png' },
+    { id: 'avatar2', url: 'https://i.ibb.co/M3T30ZJ/download-1.jpg' },
+    { id: 'avatar3', url: 'https://i.ibb.co/yBNK041/image.png' },
+    { id: 'avatar4', url: 'https://i.ibb.co/KmfYN3T/image.png' },
+];
+
+// Zod schema for validation - photoURL is now a string from our predefined list
 const profileFormSchema = z.object({
     displayName: z.string().min(3, { message: "Nome deve ter pelo menos 3 caracteres." }).max(50, { message: "Nome não pode exceder 50 caracteres."}),
-    photoURL: z.string().url({ message: "Por favor, insira uma URL válida para a foto." }).nullable().optional().or(z.literal('')), // Allow empty string, null, or valid URL
-    bannerURL: z.string().url({ message: "Por favor, insira uma URL válida para o banner." }).nullable().optional().or(z.literal('')), // Add bannerURL field
+    photoURL: z.string({ required_error: "Por favor, selecione um avatar." }),
 });
 
 type ProfileFormData = z.infer<typeof profileFormSchema>;
 
 export default function UpdateProfileForm({ currentUser, currentProfile, onUpdateSuccess, setOpen }: UpdateProfileFormProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [photoPreviewUrl, setPhotoPreviewUrl] = useState(currentProfile.photoURL || ""); // State for preview
     const { toast } = useToast();
 
     const form = useForm<ProfileFormData>({
         resolver: zodResolver(profileFormSchema),
         defaultValues: {
             displayName: currentProfile.displayName || "",
-            photoURL: currentProfile.photoURL || "", // Pre-fill with current photoURL
-            bannerURL: currentProfile.bannerURL || "", // Pre-fill with current bannerURL
+            photoURL: currentProfile.photoURL || predefinedAvatars[0].url, // Pre-fill with current photoURL
         },
     });
 
-     // Update preview URLs when form values change
-     useEffect(() => {
-        const subscription = form.watch((value, { name, type }) => {
-            if (name === 'photoURL') {
-                setPhotoPreviewUrl(value.photoURL || "");
-            }
-            // Removed bannerURL preview update
-        });
-        return () => subscription.unsubscribe();
-    }, [form]);
-
 
     async function onSubmit(values: ProfileFormData) {
-        // Ensure currentUser is valid before proceeding
-        if (!currentUser?.uid) {
-             toast({ title: "Erro", description: "Usuário não identificado.", variant: "destructive" });
+        if (!currentUser?.uid || !auth || !db) {
+             toast({ title: "Erro", description: "Usuário ou conexão inválida.", variant: "destructive" });
              return;
-        }
-        // Check if auth and db are available
-        if (!auth || !db) {
-            toast({ title: "Erro", description: "Erro de conexão com serviços Firebase.", variant: "destructive" });
-            return;
         }
 
         setIsSubmitting(true);
@@ -103,7 +93,6 @@ export default function UpdateProfileForm({ currentUser, currentProfile, onUpdat
 
         // Handle potentially empty URLs
         const newPhotoUrl = values.photoURL?.trim() || null;
-        const newBannerUrl = values.bannerURL?.trim() || null; // Keep banner URL processing
 
         try {
             // Check if displayName changed
@@ -119,13 +108,6 @@ export default function UpdateProfileForm({ currentUser, currentProfile, onUpdat
                 firestoreUpdates.photoURL = newPhotoUrl;
                 authProfileUpdates.photoURL = newPhotoUrl; // Update Auth photoURL as well
             }
-
-            // Check if bannerURL changed
-             if (newBannerUrl !== currentProfile.bannerURL) {
-                 updates.bannerURL = newBannerUrl;
-                 firestoreUpdates.bannerURL = newBannerUrl;
-                 // bannerURL is not part of Firebase Auth profile, only Firestore
-             }
 
             // --- Perform Updates (only if needed) ---
             let updated = false;
@@ -194,25 +176,9 @@ export default function UpdateProfileForm({ currentUser, currentProfile, onUpdat
             <DialogHeader>
                 <DialogTitle className="text-foreground">Editar Perfil</DialogTitle>
                 <DialogDescription className="text-muted-foreground">
-                     Altere seu nome de exibição, URL da foto e URL do banner.
+                     Altere seu nome de exibição e escolha um novo avatar.
                 </DialogDescription>
             </DialogHeader>
-
-             {/* Previews */}
-             <div className="flex flex-col items-center gap-4 mb-4">
-                 {/* Avatar Preview */}
-                <div className="flex flex-col items-center">
-                     <Label className="mb-2 text-xs text-muted-foreground">Prévia Foto de Perfil</Label>
-                    <Avatar className="h-20 w-20 border-4 border-background bg-muted shadow-lg">
-                        <AvatarImage src={photoPreviewUrl || undefined} alt={currentProfile?.displayName} />
-                        <AvatarFallback className="text-2xl">
-                            {currentProfile?.displayName ? currentProfile.displayName.substring(0, 2).toUpperCase() : <UserIcon className="h-8 w-8" />}
-                        </AvatarFallback>
-                    </Avatar>
-                </div>
-                {/* Banner Preview is removed */}
-            </div>
-
 
             <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 py-4">
@@ -230,47 +196,49 @@ export default function UpdateProfileForm({ currentUser, currentProfile, onUpdat
                         )}
                     />
 
-                    {/* Photo URL Input Field */}
-                    <FormField
+                    {/* Photo URL Selection Field */}
+                     <FormField
                         control={form.control}
                         name="photoURL"
                         render={({ field }) => (
-                            <FormItem>
-                                <FormLabel className="text-foreground">URL da Foto de Perfil</FormLabel>
+                            <FormItem className="space-y-3">
+                                <FormLabel className="text-foreground">Escolha seu Avatar</FormLabel>
                                 <FormControl>
-                                    <Input
-                                        placeholder="https://exemplo.com/sua-foto.png"
-                                        {...field}
-                                        value={field.value ?? ''} // Handle null value for input
-                                        className="bg-input"
-                                        disabled={isSubmitting}
-                                    />
+                                    <RadioGroup
+                                        onValueChange={field.onChange}
+                                        defaultValue={field.value}
+                                        className="grid grid-cols-4 gap-4"
+                                    >
+                                        {predefinedAvatars.map((avatar) => (
+                                            <FormItem key={avatar.id} className="flex items-center justify-center space-x-3 space-y-0">
+                                                <FormControl>
+                                                     <RadioGroupItem value={avatar.url} className="sr-only" />
+                                                </FormControl>
+                                                <Label
+                                                     htmlFor={avatar.id}
+                                                     className={cn(
+                                                        'cursor-pointer rounded-full border-2 border-transparent transition-all',
+                                                        field.value === avatar.url && 'ring-2 ring-primary ring-offset-2 border-primary'
+                                                     )}
+                                                >
+                                                     <Image
+                                                        src={avatar.url}
+                                                        alt={`Avatar ${avatar.id}`}
+                                                        width={64}
+                                                        height={64}
+                                                        className="rounded-full"
+                                                        data-ai-hint="avatar gaming"
+                                                     />
+                                                </Label>
+                                            </FormItem>
+                                         ))}
+                                    </RadioGroup>
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
                         )}
                     />
 
-                     {/* Banner URL Input Field */}
-                     <FormField
-                        control={form.control}
-                        name="bannerURL"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel className="text-foreground">URL do Banner do Perfil</FormLabel>
-                                <FormControl>
-                                    <Input
-                                        placeholder="https://exemplo.com/seu-banner.png"
-                                        {...field}
-                                        value={field.value ?? ''} // Handle null value for input
-                                        className="bg-input"
-                                        disabled={isSubmitting}
-                                    />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
 
                     <DialogFooter className="mt-4">
                         <DialogClose asChild>
