@@ -50,15 +50,23 @@ interface UpdateProfileFormProps {
     setOpen: (open: boolean) => void;
 }
 
-// Pre-defined avatars
-const predefinedAvatars = [
-    { id: 'avatar1', url: 'https://i.ibb.co/VGBd4FG/Chat-GPT-Image-2-de-ago-de-2025-15-33-39.png' },
-    { id: 'avatar2', url: 'https://i.ibb.co/M3T30ZJ/download-1.jpg' },
-    { id: 'avatar3', url: 'https://i.ibb.co/yBNK041/image.png' },
-    { id: 'avatar4', url: 'https://i.ibb.co/KmfYN3T/image.png' },
-];
+// Avatars organized by rank
+const avatarsByRank: { [key: string]: { id: string; url: string }[] } = {
+  iniciante: [
+    { id: 'iniciante1', url: 'https://i.imgur.com/w1i3Zp8.png' }, // fundo vermelho
+    { id: 'iniciante2', url: 'https://i.imgur.com/yv6Z5fI.png' }, // fundo azul
+    { id: 'iniciante3', url: 'https://i.imgur.com/7Y2Z1W1.png' }, // fundo roxo
+    { id: 'iniciante4', url: 'https://i.imgur.com/Z4M1tG5.png' }, // fundo laranja
+    { id: 'iniciante5', url: 'https://i.imgur.com/Y4j5S4H.png' }, // fundo cinza
+  ],
+  modder_junior: [
+    // Add URLs for Modder Júnior here in the future
+  ],
+  // Add other ranks as needed
+};
 
-// Zod schema for validation - photoURL is now a string from our predefined list
+
+// Zod schema for validation
 const profileFormSchema = z.object({
     displayName: z.string().min(3, { message: "Nome deve ter pelo menos 3 caracteres." }).max(50, { message: "Nome não pode exceder 50 caracteres."}),
     photoURL: z.string({ required_error: "Por favor, selecione um avatar." }),
@@ -70,11 +78,14 @@ export default function UpdateProfileForm({ currentUser, currentProfile, onUpdat
     const [isSubmitting, setIsSubmitting] = useState(false);
     const { toast } = useToast();
 
+    // Determine which set of avatars to show
+    const availableAvatars = avatarsByRank[currentProfile.rank] || avatarsByRank.iniciante;
+
     const form = useForm<ProfileFormData>({
         resolver: zodResolver(profileFormSchema),
         defaultValues: {
             displayName: currentProfile.displayName || "",
-            photoURL: currentProfile.photoURL || predefinedAvatars[0].url, // Pre-fill with current photoURL
+            photoURL: currentProfile.photoURL || availableAvatars[0]?.url || '',
         },
     });
 
@@ -121,7 +132,7 @@ export default function UpdateProfileForm({ currentUser, currentProfile, onUpdat
                 updated = true;
             }
 
-            // 2. Update Firestore 'users' document (displayName, photoURL, bannerURL)
+            // 2. Update Firestore 'users' document (displayName, photoURL)
             if (Object.keys(firestoreUpdates).length > 0) {
                 const userDocRef = doc(db, "users", currentUser.uid);
                 await updateDoc(userDocRef, firestoreUpdates);
@@ -207,13 +218,10 @@ export default function UpdateProfileForm({ currentUser, currentProfile, onUpdat
                                     <RadioGroup
                                         onValueChange={field.onChange}
                                         defaultValue={field.value}
-                                        className="grid grid-cols-4 gap-4"
+                                        className="grid grid-cols-5 gap-4" // Changed to 5 columns
                                     >
-                                        {predefinedAvatars.map((avatar) => (
+                                        {availableAvatars.map((avatar) => (
                                             <FormItem key={avatar.id} className="flex items-center justify-center space-x-3 space-y-0">
-                                                <FormControl>
-                                                     <RadioGroupItem value={avatar.url} id={avatar.id} className="sr-only" />
-                                                </FormControl>
                                                 <Label
                                                      htmlFor={avatar.id}
                                                      className={cn(
@@ -221,6 +229,9 @@ export default function UpdateProfileForm({ currentUser, currentProfile, onUpdat
                                                         field.value === avatar.url && 'ring-2 ring-primary ring-offset-2 border-primary'
                                                      )}
                                                 >
+                                                    <FormControl>
+                                                         <RadioGroupItem value={avatar.url} id={avatar.id} className="sr-only" />
+                                                    </FormControl>
                                                      <Image
                                                         src={avatar.url}
                                                         alt={`Avatar ${avatar.id}`}
