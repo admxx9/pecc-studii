@@ -56,6 +56,7 @@ const avatarsByRank: { [key: string]: { id: string; url: string }[] } = {
     { id: 'iniciante2', url: 'https://i.imgur.com/WMK9rJs.png' }, // fundo azul
     { id: 'iniciante3', url: 'https://i.imgur.com/BwGqgFs.png' }, // fundo roxo
     { id: 'iniciante4', url: 'https://i.imgur.com/IrMkLO8.png' }, // fundo cinza
+    { id: 'iniciante5', url: 'https://i.imgur.com/OFi0aNr.png' }, // fundo laranja
   ],
   modder_junior: [
     // Add URLs for Modder Júnior here in the future
@@ -216,10 +217,13 @@ export default function UpdateProfileForm({ currentUser, currentProfile, onUpdat
                                     <RadioGroup
                                         onValueChange={field.onChange}
                                         defaultValue={field.value}
-                                        className="grid grid-cols-5 gap-4" // Changed to 5 columns
+                                        className="grid grid-cols-5 gap-4"
                                     >
                                         {availableAvatars.map((avatar) => (
                                             <FormItem key={avatar.id} className="flex items-center justify-center space-x-3 space-y-0">
+                                                <FormControl>
+                                                    <RadioGroupItem value={avatar.url} id={avatar.id} className="sr-only" />
+                                                </FormControl>
                                                 <Label
                                                      htmlFor={avatar.id}
                                                      className={cn(
@@ -227,9 +231,6 @@ export default function UpdateProfileForm({ currentUser, currentProfile, onUpdat
                                                         field.value === avatar.url && 'ring-2 ring-primary ring-offset-2 border-primary'
                                                      )}
                                                 >
-                                                    <FormControl>
-                                                         <RadioGroupItem value={avatar.url} id={avatar.id} className="sr-only" />
-                                                    </FormControl>
                                                      <Image
                                                         src={avatar.url}
                                                         alt={`Avatar ${avatar.id}`}
