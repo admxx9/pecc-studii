@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState } from 'react';
@@ -56,7 +55,7 @@ const avatarsByRank: { [key: string]: { id: string; url: string }[] } = {
     { id: 'iniciante1', url: 'https://i.imgur.com/D496jwP.png' }, // fundo vermelho
     { id: 'iniciante2', url: 'https://i.imgur.com/WMK9rJs.png' }, // fundo azul
     { id: 'iniciante3', url: 'https://i.imgur.com/BwGqgFs.png' }, // fundo roxo
-    { id: 'iniciante4', url: 'https://i.imgur.com/WMK9rJs.png' }, // fundo cinza
+    { id: 'iniciante4', url: 'https://i.imgur.com/IrMkLO8.png' }, // fundo cinza
   ],
   modder_junior: [
     // Add URLs for Modder Júnior here in the future
