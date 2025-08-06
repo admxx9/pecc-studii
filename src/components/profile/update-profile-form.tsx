@@ -53,11 +53,10 @@ interface UpdateProfileFormProps {
 // Avatars organized by rank
 const avatarsByRank: { [key: string]: { id: string; url: string }[] } = {
   iniciante: [
-    { id: 'iniciante1', url: 'https://i.imgur.com/w1i3Zp8.png' }, // fundo vermelho
-    { id: 'iniciante2', url: 'https://i.imgur.com/yv6Z5fI.png' }, // fundo azul
-    { id: 'iniciante3', url: 'https://i.imgur.com/7Y2Z1W1.png' }, // fundo roxo
-    { id: 'iniciante4', url: 'https://i.imgur.com/Z4M1tG5.png' }, // fundo laranja
-    { id: 'iniciante5', url: 'https://i.imgur.com/Y4j5S4H.png' }, // fundo cinza
+    { id: 'iniciante1', url: 'https://i.imgur.com/D496jwP.png' }, // fundo vermelho
+    { id: 'iniciante2', url: 'https://i.imgur.com/WMK9rJs.png' }, // fundo azul
+    { id: 'iniciante3', url: 'https://i.imgur.com/BwGqgFs.png' }, // fundo roxo
+    { id: 'iniciante4', url: 'https://i.imgur.com/WMK9rJs.png' }, // fundo cinza
   ],
   modder_junior: [
     // Add URLs for Modder Júnior here in the future
