@@ -212,7 +212,7 @@ export default function UpdateProfileForm({ currentUser, currentProfile, onUpdat
                                         {predefinedAvatars.map((avatar) => (
                                             <FormItem key={avatar.id} className="flex items-center justify-center space-x-3 space-y-0">
                                                 <FormControl>
-                                                     <RadioGroupItem value={avatar.url} className="sr-only" />
+                                                     <RadioGroupItem value={avatar.url} id={avatar.id} className="sr-only" />
                                                 </FormControl>
                                                 <Label
                                                      htmlFor={avatar.id}
