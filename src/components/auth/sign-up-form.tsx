@@ -58,6 +58,7 @@ export default function SignUpForm({ setOpen }: SignUpFormProps) {
     }
 
     const standardAvatarUrl = 'https://i.ibb.co/VGBd4FG/Chat-GPT-Image-2-de-ago-de-2025-15-33-39.png'; // Define standard avatar URL
+    const defaultBannerUrl = 'https://i.imgur.com/VmlfAGR.jpeg'; // Define default banner URL
 
     try {
       // 1. Create user in Firebase Auth
@@ -85,7 +86,7 @@ export default function SignUpForm({ setOpen }: SignUpFormProps) {
         rank: 'iniciante', // Default rank
         isAdmin: false, // Default admin status
         isPremium: false, // Default premium status
-        bannerURL: null, // Default bannerURL
+        bannerURL: defaultBannerUrl, // Default bannerURL
         createdAt: serverTimestamp(), // Timestamp of creation
       });
       console.log("User document created in Firestore:", userDocRef.id);

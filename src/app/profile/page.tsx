@@ -40,6 +40,7 @@ export default function ProfilePage() {
 
     const fetchUserProfile = useCallback(async (userId: string) => {
         if (!db) return null;
+        const defaultBannerUrl = 'https://i.imgur.com/VmlfAGR.jpeg';
         const userDocRef = doc(db, 'users', userId);
         try {
             const docSnap = await getDoc(userDocRef);
@@ -53,7 +54,7 @@ export default function ProfilePage() {
                     isAdmin: data.isAdmin === true,
                     isPremium: data.isPremium === true, // Fetch premium status
                     premiumPlanType: data.premiumPlanType || null, // Fetch premium plan type
-                    bannerURL: data.bannerURL || null, // Fetch banner URL
+                    bannerURL: data.bannerURL || defaultBannerUrl, // Fetch banner URL or use default
                 } as UserProfileData;
             } else {
                  const defaultProfile: UserProfileData = {
@@ -64,7 +65,7 @@ export default function ProfilePage() {
                     isAdmin: false,
                     isPremium: false,
                     premiumPlanType: null,
-                    bannerURL: null,
+                    bannerURL: defaultBannerUrl, // Use default banner
                 };
                  return defaultProfile;
             }
