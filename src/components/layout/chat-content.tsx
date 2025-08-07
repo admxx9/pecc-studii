@@ -103,6 +103,32 @@ const SUPPORT_CHANNEL_ID = 'support-channel';
 const TICKETS_CATEGORY_ID = 'tickets-category';
 
 
+// --- Static Support Content ---
+const supportCategory: ChatCategory = {
+    id: SUPPORT_CATEGORY_ID,
+    name: 'Suporte',
+    order: -1, // Always on top
+    createdAt: new Timestamp(0, 0),
+};
+const supportChannel: ChatChannel = {
+    id: SUPPORT_CHANNEL_ID,
+    name: 'suporte',
+    categoryId: SUPPORT_CATEGORY_ID,
+};
+const botMessage: ChatMessage = {
+    id: 'bot-message-1',
+    text: 'Bem-vindo ao canal de suporte! Se precisar de ajuda, clique no botão abaixo para abrir um ticket privado e nossa equipe irá atendê-lo.',
+    user: {
+        uid: 'bot',
+        name: 'STUDIO PECC Bot',
+        avatar: 'https://i.imgur.com/sXliRZl.png', // Logo as avatar
+    },
+    createdAt: new Timestamp(new Date().getTime() / 1000, 0),
+    isBotMessage: true,
+    actions: [{ text: 'Abrir Ticket', actionId: 'create-ticket' }],
+};
+
+
 export default function ChatContent({ userProfile }: ChatContentProps) {
     const [categories, setCategories] = useState<ChatCategory[]>([]);
     const [channels, setChannels] = useState<ChatChannel[]>([]);
@@ -128,31 +154,6 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     const [newCategoryOrder, setNewCategoryOrder] = useState(0);
     const [itemToDelete, setItemToDelete] = useState<{ type: 'channel' | 'category', item: ChatChannel | ChatCategory } | null>(null);
 
-
-     // --- Static Support Content ---
-    const supportCategory: ChatCategory = {
-        id: SUPPORT_CATEGORY_ID,
-        name: 'Suporte',
-        order: -1, // Always on top
-        createdAt: new Timestamp(0, 0),
-    };
-    const supportChannel: ChatChannel = {
-        id: SUPPORT_CHANNEL_ID,
-        name: 'suporte',
-        categoryId: SUPPORT_CATEGORY_ID,
-    };
-     const botMessage: ChatMessage = {
-        id: 'bot-message-1',
-        text: 'Bem-vindo ao canal de suporte! Se precisar de ajuda, clique no botão abaixo para abrir um ticket privado e nossa equipe irá atendê-lo.',
-        user: {
-            uid: 'bot',
-            name: 'STUDIO PECC Bot',
-            avatar: 'https://i.imgur.com/sXliRZl.png', // Logo as avatar
-        },
-        createdAt: new Timestamp(new Date().getTime() / 1000, 0),
-        isBotMessage: true,
-        actions: [{ text: 'Abrir Ticket', actionId: 'create-ticket' }],
-    };
 
 
     const fetchSidebarData = useCallback(async () => {
@@ -205,7 +206,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         } finally {
             setIsLoading(false);
         }
-    }, [db, userProfile?.uid, userProfile?.isAdmin, activeChannel, toast]);
+    }, [userProfile?.uid, userProfile?.isAdmin, activeChannel, toast]);
 
 
     useEffect(() => {
@@ -239,7 +240,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     });
 
     return () => unsubscribe();
-  }, [activeChannel, toast, botMessage]);
+  }, [activeChannel, toast]);
 
 
   // Scroll to bottom when new messages are added
