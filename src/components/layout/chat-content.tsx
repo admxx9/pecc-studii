@@ -30,25 +30,18 @@ import {
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge"; // Import Badge
 import { Checkbox } from "@/components/ui/checkbox";
-
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-    ContextMenu,
-    ContextMenuContent,
-    ContextMenuItem,
-    ContextMenuTrigger,
-} from "@/components/ui/context-menu";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+
 import { cn } from '@/lib/utils';
 import type { UserProfile } from '@/components/page/home-client-page';
 import { db } from '@/lib/firebase';
@@ -179,8 +172,29 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     const [newCategoryOrder, setNewCategoryOrder] = useState(0);
     const [allowedRanks, setAllowedRanks] = useState<string[]>([]);
     const [itemToManage, setItemToManage] = useState<{ type: 'channel' | 'category', action: 'delete' | 'close', item: ChatChannel | ChatCategory } | null>(null);
+    
+    // State for mentions
+    const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+    const [mentionQuery, setMentionQuery] = useState('');
+    const [isMentioning, setIsMentioning] = useState(false);
+    const [mentionPopupPosition, setMentionPopupPosition] = useState({ top: 0, left: 0 });
+    const mentionStartPositionRef = useRef<number | null>(null);
 
-
+    // Fetch all users for mentions
+    useEffect(() => {
+        if (!db) return;
+        const fetchUsers = async () => {
+            try {
+                const usersCol = collection(db, 'users');
+                const usersSnapshot = await getDocs(usersCol);
+                const fetchedUsers = usersSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() })) as UserProfile[];
+                setAllUsers(fetchedUsers);
+            } catch (error) {
+                console.error("Error fetching users for mentions:", error);
+            }
+        };
+        fetchUsers();
+    }, []);
 
     const fetchSidebarData = useCallback(async () => {
         if (!db) return;
@@ -598,6 +612,44 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         }
     };
 
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        const cursorPosition = e.target.selectionStart || 0;
+        const atIndex = value.lastIndexOf('@', cursorPosition - 1);
+
+        if (atIndex !== -1) {
+            const query = value.substring(atIndex + 1, cursorPosition);
+            if (!/\s/.test(query)) {
+                setIsMentioning(true);
+                setMentionQuery(query);
+                mentionStartPositionRef.current = atIndex;
+                const rect = e.target.getBoundingClientRect();
+                setMentionPopupPosition({ top: rect.top - 200, left: rect.left });
+            } else {
+                setIsMentioning(false);
+            }
+        } else {
+            setIsMentioning(false);
+        }
+        setNewMessage(value);
+    };
+
+    const handleMentionSelect = (user: UserProfile) => {
+        if (mentionStartPositionRef.current === null) return;
+        const before = newMessage.substring(0, mentionStartPositionRef.current);
+        const after = newMessage.substring(inputRef.current?.selectionStart || 0);
+        setNewMessage(`${before}@${user.displayName} ${after}`);
+        setIsMentioning(false);
+        setMentionQuery('');
+        mentionStartPositionRef.current = null;
+        inputRef.current?.focus();
+    };
+
+    const filteredUsersForMention = allUsers.filter(user =>
+        user.displayName.toLowerCase().includes(mentionQuery.toLowerCase())
+    ).slice(0, 5);
+
+
     const RankIcon = ({ rank }: { rank?: string }) => {
         const Icon = rank ? rankIcons[rank] : null;
         if (!Icon) return null;
@@ -612,19 +664,17 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
          <header className="flex items-center justify-between p-2 mb-1">
             <h2 className="text-md font-semibold text-foreground">Canais</h2>
             {userProfile?.isAdmin && (
-                <div className="flex items-center gap-1">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                             <Button variant="ghost" size="icon" className="h-6 w-6">
-                                <Plus className="h-4 w-4" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                            <DropdownMenuItem onSelect={() => handleOpenChannelModal()}>Criar Canal</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => handleOpenCategoryModal()}>Criar Categoria</DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
+                 <Popover>
+                    <PopoverTrigger asChild>
+                         <Button variant="ghost" size="icon" className="h-6 w-6">
+                            <Plus className="h-4 w-4" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-40 p-1">
+                         <Button variant="ghost" className="w-full justify-start text-sm h-8" onClick={() => handleOpenChannelModal()}>Criar Canal</Button>
+                         <Button variant="ghost" className="w-full justify-start text-sm h-8" onClick={() => handleOpenCategoryModal()}>Criar Categoria</Button>
+                    </PopoverContent>
+                </Popover>
             )}
         </header>
         <ScrollArea className="flex-1">
@@ -636,7 +686,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
           ) : (
             <Accordion type="multiple" defaultValue={categories.map(c => c.id)} className="w-full">
                 {categories.map(category => (
-                    <AccordionItem value={category.id} key={category.id} className="border-b-0 group">
+                    <AccordionItem value={category.id} key={category.id} className="border-b-0 group/category">
                         <ContextMenu>
                             <ContextMenuTrigger disabled={!userProfile?.isAdmin || [SUPPORT_CATEGORY_ID, TICKETS_CATEGORY_ID, TICKETS_ARCHIVED_CATEGORY_ID].includes(category.id)}>
                                 <div className="flex items-center justify-between group">
@@ -695,7 +745,34 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         </header>
 
         {/* Messages Area */}
-         <div className="flex-1 overflow-hidden flex flex-col">
+         <div className="flex-1 overflow-hidden flex flex-col relative">
+            {isMentioning && filteredUsersForMention.length > 0 && (
+                <Card
+                    className="absolute z-20 w-72 rounded-md border bg-popover text-popover-foreground shadow-md"
+                    style={{ bottom: '80px', left: '20px' }} // Position above input
+                >
+                    <CardHeader className="p-2">
+                        <CardTitle className="text-sm font-medium">Mencionar Usuário</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                        <ScrollArea className="h-40">
+                            {filteredUsersForMention.map(user => (
+                                <button
+                                    key={user.uid}
+                                    className="w-full text-left flex items-center gap-2 p-2 hover:bg-accent"
+                                    onClick={() => handleMentionSelect(user)}
+                                >
+                                    <Avatar className="h-6 w-6">
+                                        <AvatarImage src={user.photoURL || undefined} />
+                                        <AvatarFallback>{user.displayName.substring(0, 2)}</AvatarFallback>
+                                    </Avatar>
+                                    <span className="text-sm">{user.displayName}</span>
+                                </button>
+                            ))}
+                        </ScrollArea>
+                    </CardContent>
+                </Card>
+            )}
              <ScrollArea className="flex-1" ref={scrollAreaRef}>
                  <div className="p-4 space-y-4 pr-4 min-h-full flex flex-col justify-end">
                   {!activeChannel ? (
@@ -743,33 +820,33 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                                     <MessageSquareReply className="h-4 w-4" />
                                     <span className="sr-only">Responder</span>
                                     </Button>
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
-                                            <MoreHorizontal className="h-4 w-4" />
-                                            <span className="sr-only">Mais</span>
-                                        </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end" className="bg-card border-border">
-                                            <DropdownMenuItem onSelect={() => handleReplyClick(msg)} className="cursor-pointer">
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
+                                                <MoreHorizontal className="h-4 w-4" />
+                                                <span className="sr-only">Mais</span>
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent align="end" className="w-40 p-1 bg-card border-border">
+                                            <Button variant="ghost" className="w-full justify-start h-8 text-sm" onSelect={() => handleReplyClick(msg)}>
                                                 <MessageSquareReply className="mr-2 h-4 w-4" />
-                                                <span>Responder</span>
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem onSelect={() => handleCopyText(msg.text)} className="cursor-pointer">
+                                                Responder
+                                            </Button>
+                                            <Button variant="ghost" className="w-full justify-start h-8 text-sm" onClick={() => handleCopyText(msg.text)}>
                                                 <CopyIcon className="mr-2 h-4 w-4" />
-                                                <span>Copiar Texto</span>
-                                            </DropdownMenuItem>
+                                                Copiar Texto
+                                            </Button>
                                             {canDelete && (
                                             <>
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuItem onSelect={() => handleDeleteMessage(msg.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer">
+                                                <hr className="my-1 border-border" />
+                                                <Button variant="ghost" className="w-full justify-start h-8 text-sm text-destructive hover:text-destructive" onClick={() => handleDeleteMessage(msg.id)}>
                                                     <Trash2 className="mr-2 h-4 w-4" />
-                                                    <span>Excluir Mensagem</span>
-                                                </DropdownMenuItem>
+                                                    Excluir
+                                                </Button>
                                             </>
                                             )}
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
+                                        </PopoverContent>
+                                    </Popover>
                                 </div>
                             </div>
                          )}
@@ -798,7 +875,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                                        {msg.user.name}
                                     </div>
                                 ) : (
-                                    <p className="font-semibold text-foreground flex items-center">{msg.user.name} <RankIcon rank={msg.user.rank} /></p>
+                                    <div className="font-semibold text-foreground flex items-center">{msg.user.name} <RankIcon rank={msg.user.rank} /></div>
                                 )}
                                 <p className="text-xs text-muted-foreground">{formatDate(msg.createdAt)}</p>
                             </div>
@@ -865,7 +942,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                 <Input
                   ref={inputRef}
                   value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
+                  onChange={handleInputChange}
                   placeholder={activeChannel ? `Conversar em #${activeChannel.name}` : 'Selecione um canal para conversar'}
                   className={cn("flex-1 bg-input", replyingTo && "rounded-t-none")}
                   autoComplete="off"
