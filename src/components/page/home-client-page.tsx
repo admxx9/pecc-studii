@@ -26,7 +26,7 @@ import { auth, db } from "@/lib/firebase";
 import { collection, doc, setDoc, getDoc, updateDoc, getDocs, query, orderBy, serverTimestamp, QueryConstraint, where, onSnapshot, Unsubscribe } from "firebase/firestore"; // Added onSnapshot, Unsubscribe
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Wrench } from 'lucide-react';
 import HomeDynamicLoader from '@/components/page/home-dynamic-loader';
 
 
@@ -62,6 +62,11 @@ export type ActiveTab = 'aulas' | 'ferramentas' | 'chat' | 'admin';
 
 const LOGO_URL = "https://i.imgur.com/sXliRZl.png"; // Use the correct Logo URL
 
+// New type for site settings
+interface SiteSettings {
+    isMaintenanceMode: boolean;
+    maintenanceMessage: string;
+}
 
 export default function HomeClientPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('aulas');
@@ -77,6 +82,7 @@ export default function HomeClientPage() {
   const [isLoadingSignIn, setIsLoadingSignIn] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isSignUpOpen, setIsSignUpOpen] = useState(false);
+  const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -105,6 +111,20 @@ export default function HomeClientPage() {
     let isMounted = true;
     let unsubscribeProfile: Unsubscribe | null = null; // For real-time profile updates
     let unsubscribeProgress: Unsubscribe | null = null; // For real-time progress updates
+    let unsubscribeSettings: Unsubscribe | null = null;
+
+    // Listener for site settings (maintenance mode)
+    if (db) {
+        const settingsDocRef = doc(db, 'settings', 'site_config');
+        unsubscribeSettings = onSnapshot(settingsDocRef, (docSnap) => {
+            if (!isMounted) return;
+            if (docSnap.exists()) {
+                setSiteSettings(docSnap.data() as SiteSettings);
+            } else {
+                setSiteSettings({ isMaintenanceMode: false, maintenanceMessage: 'O site está em manutenção. Voltamos em breve!' });
+            }
+        });
+    }
 
     console.log("Setting up Firebase Auth listener...");
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
@@ -334,6 +354,7 @@ export default function HomeClientPage() {
       unsubscribeAuth();
       if (unsubscribeProfile) unsubscribeProfile();
       if (unsubscribeProgress) unsubscribeProgress();
+      if (unsubscribeSettings) unsubscribeSettings();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Rerun only on mount/unmount
@@ -450,7 +471,7 @@ export default function HomeClientPage() {
 
   const renderContent = () => {
      // Show loading indicator only if truly loading and not just waiting for auth/initial data
-     if (isLoading && !user && !lessons.length) { // Adjust condition to be more specific
+     if (isLoading || !siteSettings) { // Adjust condition to be more specific
       return (
         <div className="flex justify-center items-center flex-1 flex-grow">
             <Loader2 className="mr-2 h-8 w-8 animate-spin text-primary" />
@@ -473,6 +494,17 @@ export default function HomeClientPage() {
 
 
     if (!isLoggedIn) {
+        if (siteSettings.isMaintenanceMode) {
+            return (
+                <div className="flex flex-col justify-center items-center flex-1 flex-grow p-4">
+                    <Card className="w-full max-w-lg bg-card shadow-xl border-border rounded-lg p-8 text-center">
+                        <Wrench className="w-12 h-12 mx-auto text-primary mb-4" />
+                        <h2 className="text-2xl font-bold text-foreground mb-2">Em Manutenção</h2>
+                        <p className="text-muted-foreground">{siteSettings.maintenanceMessage}</p>
+                    </Card>
+                </div>
+            )
+        }
       return (
         // Centered Login Form Container
          <div className="flex flex-col justify-center items-center flex-1 flex-grow p-4">
@@ -564,6 +596,20 @@ export default function HomeClientPage() {
           </Dialog>
         </div>
       );
+    }
+    
+    // Show maintenance screen for non-admins if active
+    if (siteSettings.isMaintenanceMode && !userProfile?.isAdmin) {
+         return (
+            <div className="flex flex-col justify-center items-center flex-1 flex-grow p-4">
+                <Card className="w-full max-w-lg bg-card shadow-xl border-border rounded-lg p-8 text-center">
+                    <Wrench className="w-12 h-12 mx-auto text-primary mb-4" />
+                    <h2 className="text-2xl font-bold text-foreground mb-2">Em Manutenção</h2>
+                    <p className="text-muted-foreground">{siteSettings.maintenanceMessage}</p>
+                    <Button onClick={handleSignOut} className="mt-6">Sair</Button>
+                </Card>
+            </div>
+        )
     }
 
     // Logged-in user view
@@ -826,7 +872,7 @@ export default function HomeClientPage() {
       `}</style>
 
        {/* Conditionally render Header */}
-       {isLoggedIn && (
+       {isLoggedIn && (!siteSettings?.isMaintenanceMode || userProfile?.isAdmin) && (
           <Header
             activeTab={activeTab}
             setActiveTab={setActiveTab}

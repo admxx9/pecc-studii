@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState } from 'react';
@@ -13,12 +14,13 @@ import ManageLessonsList from '@/components/admin/manage-lessons-list';
 import EditLessonForm from '@/components/admin/edit-lesson-form';
 import NotificationSender from '@/components/admin/notification-sender'; // Import NotificationSender
 import ManageCodes from '@/components/admin/manage-codes'; // Import ManageCodes
+import SettingsPanel from '@/components/admin/settings-panel'; // Import SettingsPanel
 import type { Tool } from '@/components/layout/tools-content';
 import type { Lesson } from '@/app/page';
 
 
 // Add 'manage-codes' to the section types
-type AdminSection = 'overview' | 'add-lesson' | 'manage-users' | 'add-tool' | 'manage-tools' | 'manage-lessons' | 'edit-lesson' | 'edit-tool' | 'settings' | 'manage-codes';
+type AdminSection = 'overview' | 'add-lesson' | 'manage-users' | 'add-tool' | 'manage-tools' | 'manage-lessons' | 'edit-lesson' | 'edit-tool' | 'settings' | 'manage-codes' | 'server-settings';
 
 
 const AdminPanel = () => {
@@ -115,6 +117,21 @@ const AdminPanel = () => {
             Notificações
           </Button>
         </Card>
+         <Card className="bg-secondary border-border p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between rounded-md shadow-sm hover:shadow-lg transition-shadow duration-200">
+            <div className="flex-1 mr-4 mb-2 sm:mb-0">
+                <h3 className="text-lg font-medium text-foreground">Configurações do Servidor</h3>
+                <p className="text-sm text-muted-foreground mt-1">Gerencie o modo de manutenção.</p>
+            </div>
+            <Button
+                variant="outline"
+                size="sm"
+                className="hover:bg-primary hover:text-primary-foreground transition-colors w-full sm:w-auto"
+                onClick={() => setActiveSection('server-settings')}
+            >
+                <Settings className="mr-2 h-4 w-4" />
+                Configurar
+            </Button>
+         </Card>
       </div>
   );
 
@@ -130,6 +147,7 @@ const AdminPanel = () => {
             case 'manage-users':
             case 'settings':
             case 'manage-codes': // Back from manage-codes goes to overview
+            case 'server-settings':
                  return 'overview';
             default:
                 return 'overview';
@@ -153,7 +171,8 @@ const AdminPanel = () => {
                  {activeSection === 'add-tool' && <><Plus className="h-5 w-5" /> Adicionar Nova Ferramenta</>}
                  {activeSection === 'edit-tool' && <><Pencil className="h-5 w-5" /> Editar Ferramenta</>}
                  {activeSection === 'settings' && <><Bell className="h-5 w-5" /> Enviar Notificação</>}
-                 {activeSection === 'manage-codes' && <><Ticket className="h-5 w-5" /> Gerenciar Códigos Premium</>} {/* Title for new section */}
+                 {activeSection === 'manage-codes' && <><Ticket className="h-5 w-5" /> Gerenciar Códigos Premium</>}
+                 {activeSection === 'server-settings' && <><Settings className="h-5 w-5" /> Configurações do Servidor</>}
               </CardTitle>
               <CardDescription className="text-muted-foreground mt-1 text-sm">
                  {/* Conditional Description */}
@@ -166,7 +185,8 @@ const AdminPanel = () => {
                  {activeSection === 'add-tool' && 'Preencha os detalhes da nova ferramenta de modding.'}
                  {activeSection === 'edit-tool' && `Editando: ${toolToEdit?.name || 'Ferramenta'}`}
                  {activeSection === 'settings' && 'Escreva e envie notificações para os usuários.'}
-                 {activeSection === 'manage-codes' && 'Gere, visualize e monitore o uso de códigos premium.'} {/* Description for new section */}
+                 {activeSection === 'manage-codes' && 'Gere, visualize e monitore o uso de códigos premium.'}
+                 {activeSection === 'server-settings' && 'Ative o modo de manutenção e personalize a mensagem.'}
               </CardDescription>
             </div>
             {activeSection !== 'overview' && (
@@ -222,6 +242,11 @@ const AdminPanel = () => {
             {activeSection === 'settings' && (
                <NotificationSender setSection={setActiveSection} />
              )}
+            
+            {/* Server Settings */}
+            {activeSection === 'server-settings' && (
+                <SettingsPanel setSection={setActiveSection} />
+            )}
         </CardContent>
       </Card>
     </main>
