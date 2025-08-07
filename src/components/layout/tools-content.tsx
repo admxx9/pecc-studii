@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Download, Loader2, AlertTriangle, Wrench, Star, Lock, Info, Filter, ArrowUpDown, Tag } from 'lucide-react';
+import { Download, Loader2, AlertTriangle, Wrench, Star, Lock, Info, Filter, ArrowUpDown, Tag, ShoppingCart } from 'lucide-react';
 import {
     Select,
     SelectContent,
@@ -298,18 +298,19 @@ export default function ToolsContent({ selectedCategory }: ToolsContentProps) {
                                                     </div>
                                                  )}
                                                 <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto self-end sm:ml-auto">
-                                                    <Button
-                                                        variant="secondary"
-                                                        size="sm"
-                                                        className="hover:bg-accent hover:text-accent-foreground transition-colors w-full sm:w-auto"
-                                                        onClick={() => handleInfoClick(tool.id)}
-                                                        disabled={isCurrentlyNavigating || isCurrentlyDownloading}
-                                                        title="Ver informações da ferramenta"
-                                                    >
-                                                        {isCurrentlyNavigating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Info className="mr-2 h-4 w-4" />}
-                                                        Informações
-                                                    </Button>
-                                                    {isLocked ? (
+                                                    
+                                                     {tool.category === 'loja' ? (
+                                                        <Button
+                                                            variant="default"
+                                                            size="sm"
+                                                            className="bg-primary hover:bg-primary/90 transition-colors w-full sm:w-auto"
+                                                            onClick={() => handleInfoClick(tool.id)}
+                                                            disabled={isCurrentlyNavigating}
+                                                        >
+                                                            {isCurrentlyNavigating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShoppingCart className="mr-2 h-4 w-4" />}
+                                                            Comprar
+                                                        </Button>
+                                                     ) : isLocked ? (
                                                         <Button
                                                             variant="outline"
                                                             size="sm"
