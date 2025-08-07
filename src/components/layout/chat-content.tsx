@@ -69,6 +69,7 @@ interface ChatChannel {
     categoryId: string;
     isPrivate?: boolean; // For tickets
     allowedUsers?: string[]; // UIDs of users who can see it
+    createdAt: Timestamp;
 }
 
 interface ReplyInfo {
@@ -103,7 +104,6 @@ const SUPPORT_CATEGORY_ID = 'support-category';
 const SUPPORT_CHANNEL_ID = 'support-channel';
 const TICKETS_CATEGORY_ID = 'tickets-category';
 
-
 // --- Static Support Content ---
 const botMessage: ChatMessage = {
     id: 'bot-message-1',
@@ -129,8 +129,8 @@ const supportChannel: ChatChannel = {
   id: SUPPORT_CHANNEL_ID,
   name: 'suporte',
   categoryId: SUPPORT_CATEGORY_ID,
+  createdAt: new Timestamp(0, 0),
 };
-
 
 export default function ChatContent({ userProfile }: ChatContentProps) {
     const [categories, setCategories] = useState<ChatCategory[]>([]);
@@ -209,12 +209,12 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         } finally {
             setIsLoading(false);
         }
-    }, [userProfile?.uid, userProfile?.isAdmin, toast]);
+    }, [userProfile?.uid, userProfile?.isAdmin, toast, activeChannel]);
 
 
     useEffect(() => {
         fetchSidebarData();
-    }, [fetchSidebarData, activeChannel]);
+    }, [fetchSidebarData]);
 
 
   // Firestore listener for messages
@@ -309,7 +309,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             
             // Refetch channels to include the new one and navigate to it
             const newChannel = { id: newChannelRef.id, name: ticketName, categoryId: TICKETS_CATEGORY_ID, isPrivate: true, allowedUsers: [userProfile.uid], createdAt: new Timestamp(Date.now() / 1000, 0) };
-            setChannels(prev => [...prev, newChannel].sort((a, b) => a.createdAt.seconds - b.createdAt.seconds));
+            setChannels(prev => [...prev, newChannel].sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0)));
             setActiveChannel(newChannel);
 
         } catch (error) {
@@ -723,11 +723,9 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                             )}
                             <div className="flex items-baseline gap-2">
                                {msg.user.uid === 'bot' ? (
-                                    <div className="flex items-center gap-1.5">
-                                        <p className="font-semibold text-foreground flex items-center gap-1.5">
-                                          <Badge className="bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5">BOT</Badge>
-                                           {msg.user.name}
-                                        </p>
+                                    <div className="font-semibold text-foreground flex items-center gap-1.5">
+                                      <Badge className="bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5">BOT</Badge>
+                                       {msg.user.name}
                                     </div>
                                 ) : (
                                     <p className="font-semibold text-foreground">{msg.user.name}</p>
@@ -909,4 +907,3 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
   );
 }
 
-    
