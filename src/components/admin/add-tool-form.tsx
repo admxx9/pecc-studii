@@ -8,14 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-// import { Switch } from "@/components/ui/switch"; // Remove Switch import
 import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
     SelectValue,
-} from "@/components/ui/select"; // Import Select components
+} from "@/components/ui/select";
 import {
     Form,
     FormControl,
@@ -23,12 +22,13 @@ import {
     FormItem,
     FormLabel,
     FormMessage,
-    FormDescription, // Import FormDescription
+    FormDescription,
 } from "@/components/ui/form";
-import { db } from "@/lib/firebase"; // Import Firestore instance
-import { collection, addDoc, serverTimestamp } from "firebase/firestore"; // Import Firestore functions
+import { db } from "@/lib/firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
-import { LayoutGrid, PencilRuler, Code, Boxes, Cog, Star, ShoppingCart } from 'lucide-react'; // Icons for categories, added Star and ShoppingCart
+import { LayoutGrid, PencilRuler, Code, Boxes, Cog, Star, ShoppingCart } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 // Define categories - must match IDs used in Sidebar/ToolsContent
 export const toolCategories = [
@@ -39,13 +39,13 @@ export const toolCategories = [
     { id: 'geral', name: 'Geral', icon: Cog },
     { id: 'loja', name: 'Loja', icon: ShoppingCart },
 ];
-const categoryIds = toolCategories.map(cat => cat.id) as [string, ...string[]]; // For Zod enum
+const categoryIds = toolCategories.map(cat => cat.id) as [string, ...string[]];
 
 interface AddToolFormProps {
     setSection: (section: 'overview' | 'add-lesson' | 'manage-users' | 'add-tool' | 'manage-tools' | 'manage-lessons' | 'edit-lesson' | 'edit-tool' | 'settings' | 'manage-codes') => void;
 }
 
-// Define Zod schema for tool form validation, including requiredPlan and images
+// Define Zod schema for tool form validation, including new fields for 'loja'
 export const toolFormSchema = z.object({
     name: z.string().min(3, { message: "Nome deve ter pelo menos 3 caracteres." }),
     description: z.string().min(10, { message: "Descrição deve ter pelo menos 10 caracteres." }),
@@ -53,9 +53,10 @@ export const toolFormSchema = z.object({
     version: z.string().min(1, { message: "Versão é obrigatória." }),
     size: z.string().min(1, { message: "Tamanho é obrigatório (ex: 50MB, 1.2GB)." }),
     category: z.enum(categoryIds, { required_error: "Selecione uma categoria." }),
-    requiredPlan: z.enum(['none', 'basic', 'pro']).default('none'), // Use enum for plan requirement
-    images: z.string().optional(), // Optional string for image URLs (one per line)
-    // specifications: z.string().optional(), // Optional string for specifications (key:value per line)
+    requiredPlan: z.enum(['none', 'basic', 'pro']).default('none'),
+    images: z.string().optional(),
+    price: z.coerce.number().optional(), // Price is optional and converted to a number
+    tags: z.string().optional(), // Tags as a comma-separated string
 });
 
 export type ToolFormData = z.infer<typeof toolFormSchema>;
@@ -72,12 +73,16 @@ export default function AddToolForm({ setSection }: AddToolFormProps) {
             downloadUrl: "",
             version: "",
             size: "",
-            category: undefined, // Start with no category selected
-            requiredPlan: 'none', // Default to 'none' (free)
-            images: "", // Default empty images string
-            // specifications: "", // Default empty specifications string
+            category: undefined,
+            requiredPlan: 'none',
+            images: "",
+            price: 0,
+            tags: "",
         },
     });
+    
+    // Watch the category field to conditionally show Loja-specific fields
+    const selectedCategory = form.watch('category');
 
     // Function to handle form submission and save to Firestore
     async function onSubmit(values: ToolFormData) {
@@ -91,62 +96,61 @@ export default function AddToolForm({ setSection }: AddToolFormProps) {
         }
         setIsSubmitting(true);
 
-        // Process images string into array
         const imageArray = values.images?.split('\n').map(url => url.trim()).filter(url => url) || [];
+        const tagsArray = values.tags?.split(',').map(tag => tag.trim().toLowerCase()).filter(tag => tag) || [];
 
+        const dataToSave: any = {
+            name: values.name,
+            description: values.description,
+            downloadUrl: values.downloadUrl,
+            version: values.version,
+            size: values.size,
+            category: values.category,
+            requiredPlan: values.requiredPlan,
+            images: imageArray,
+            createdAt: serverTimestamp(),
+        };
 
-        console.log("Form values (Tool):", values); // Log values before sending
-        console.log("Processed images:", imageArray);
+        // Only add price and tags if the category is 'loja'
+        if (values.category === 'loja') {
+            dataToSave.price = values.price || 0;
+            dataToSave.tags = tagsArray;
+        }
 
         try {
-            // Add the new tool document to the 'tools' collection
-            const docRef = await addDoc(collection(db, "tools"), {
-                name: values.name,
-                description: values.description,
-                downloadUrl: values.downloadUrl,
-                version: values.version,
-                size: values.size,
-                category: values.category,
-                requiredPlan: values.requiredPlan, // Save requiredPlan instead of isPremium
-                images: imageArray, // Save the array of image URLs
-                createdAt: serverTimestamp(), // Add a server timestamp for ordering
-            });
-            console.log("Tool added with ID: ", docRef.id); // Log success
+            const docRef = await addDoc(collection(db, "tools"), dataToSave);
+            console.log("Tool added with ID: ", docRef.id);
 
-            // Save notification to firestore
              await addDoc(collection(db, "notifications"), {
                  title: "Nova Ferramenta Adicionada!",
-                 message: `Uma nova ferramenta "${values.name}" na categoria "${values.category}" foi adicionada. Baixe agora!`, // Updated message for tool
-                 type: "info", // Type for standard new tool notification
+                 message: `Uma nova ferramenta "${values.name}" na categoria "${values.category}" foi adicionada. Baixe agora!`,
+                 type: "info",
                  read: false,
                  createdAt: serverTimestamp(),
                  target: "global",
                  targetUserEmail: null,
-                 lessonId: null, // No lesson associated with a tool
+                 lessonId: null,
               });
 
-            // Show success toast
             toast({
                 title: "Ferramenta Adicionada!",
                 description: `A ferramenta "${values.name}" foi criada com sucesso.`,
                 variant: "default",
-                className: "bg-green-600 border-green-600 text-white" // Green success toast
+                className: "bg-green-600 border-green-600 text-white"
             });
 
-            form.reset(); // Reset form fields after successful submission
-            setSection('manage-tools'); // Go back to manage-tools list after successful submission
+            form.reset();
+            setSection('manage-tools');
 
         } catch (error: any) {
-            console.error("Error adding tool: ", error); // Log the error
-
-            // Show error toast
+            console.error("Error adding tool: ", error);
             toast({
                 title: "Erro ao Adicionar Ferramenta",
                 description: `Ocorreu um erro: ${error.message}`,
                 variant: "destructive",
             });
         } finally {
-            setIsSubmitting(false); // Re-enable the button
+            setIsSubmitting(false);
         }
     }
 
@@ -249,7 +253,6 @@ export default function AddToolForm({ setSection }: AddToolFormProps) {
                     )}
                 />
 
-                {/* Images Field */}
                 <FormField
                     control={form.control}
                     name="images"
@@ -260,7 +263,7 @@ export default function AddToolForm({ setSection }: AddToolFormProps) {
                                 <Textarea
                                     placeholder="Cole uma URL por linha..."
                                     {...field}
-                                    className="bg-input h-24" // Adjust height as needed
+                                    className="bg-input h-24"
                                 />
                             </FormControl>
                              <FormDescription className="text-xs text-muted-foreground">
@@ -270,8 +273,42 @@ export default function AddToolForm({ setSection }: AddToolFormProps) {
                         </FormItem>
                     )}
                 />
+                
+                <div className={cn("grid grid-cols-1 md:grid-cols-2 gap-4 transition-all duration-300", selectedCategory === 'loja' ? 'opacity-100 max-h-40' : 'opacity-0 max-h-0 overflow-hidden')}>
+                    <FormField
+                        control={form.control}
+                        name="price"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel className="text-foreground">Preço (R$)</FormLabel>
+                                <FormControl>
+                                    <Input type="number" step="0.01" placeholder="Ex: 29.99" {...field} className="bg-input" />
+                                </FormControl>
+                                <FormDescription className="text-xs text-muted-foreground">
+                                   Apenas para itens da categoria 'Loja'. Deixe 0 para grátis.
+                                </FormDescription>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                    <FormField
+                        control={form.control}
+                        name="tags"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel className="text-foreground">Tags (separadas por vírgula)</FormLabel>
+                                <FormControl>
+                                    <Input placeholder="Ex: mapa, favela, pago" {...field} className="bg-input" />
+                                </FormControl>
+                                 <FormDescription className="text-xs text-muted-foreground">
+                                   Para filtrar itens na loja. Ex: mapa, favela, pago, etc.
+                                 </FormDescription>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                </div>
 
-                {/* Select for Required Plan */}
                  <FormField
                     control={form.control}
                     name="requiredPlan"

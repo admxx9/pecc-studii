@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-// import { Switch } from "@/components/ui/switch"; // Remove Switch import
 import {
     Select,
     SelectContent,
@@ -23,14 +22,14 @@ import {
     FormItem,
     FormLabel,
     FormMessage,
-    FormDescription, // Import FormDescription
+    FormDescription,
 } from "@/components/ui/form";
 import { db } from "@/lib/firebase";
 import { doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
-import { LayoutGrid, PencilRuler, Code, Boxes, Cog, Trash2, Star, ShoppingCart } from 'lucide-react'; // Added Star and ShoppingCart
-import { toolCategories, toolFormSchema, ToolFormData } from './add-tool-form'; // Import shared elements
-import type { Tool } from '@/components/layout/tools-content'; // Import Tool type
+import { Trash2, Star } from 'lucide-react';
+import { toolCategories, toolFormSchema, ToolFormData } from './add-tool-form';
+import type { Tool } from '@/components/layout/tools-content';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,12 +40,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
+import { cn } from '@/lib/utils';
 
 
 interface EditToolFormProps {
     setSection: (section: 'overview' | 'add-lesson' | 'manage-users' | 'add-tool' | 'manage-tools' | 'manage-lessons' | 'edit-lesson' | 'edit-tool' | 'settings' | 'manage-codes') => void;
-    tool: Tool; // The tool data to edit
+    tool: Tool;
 }
 
 export default function EditToolForm({ setSection, tool }: EditToolFormProps) {
@@ -56,50 +56,57 @@ export default function EditToolForm({ setSection, tool }: EditToolFormProps) {
 
     const form = useForm<ToolFormData>({
         resolver: zodResolver(toolFormSchema),
-        defaultValues: { // Pre-fill form with existing tool data
+        defaultValues: {
             name: tool.name || "",
             description: tool.description || "",
             downloadUrl: tool.downloadUrl || "",
             version: tool.version || "",
             size: tool.size || "",
             category: tool.category || undefined,
-            requiredPlan: tool.requiredPlan || 'none', // Pre-fill required plan, default to 'none'
-            images: tool.images?.join('\n') || "", // Join image URLs with newline
+            requiredPlan: tool.requiredPlan || 'none',
+            images: tool.images?.join('\n') || "",
+            price: tool.price || 0,
+            tags: tool.tags?.join(', ') || "",
         },
     });
+    
+    // Watch the category field to conditionally show Loja-specific fields
+    const selectedCategory = form.watch('category');
 
-    // Function to handle form submission and update Firestore
     async function onSubmit(values: ToolFormData) {
-        if (!db) {
-            toast({ title: "Erro de Conexão", description: "Banco de dados indisponível.", variant: "destructive" });
-            return;
-        }
-        if (!tool || !tool.id) {
+        if (!db || !tool || !tool.id) {
              toast({ title: "Erro Interno", description: "ID da ferramenta inválido.", variant: "destructive" });
             return;
         }
-
         setIsSubmitting(true);
 
-        // Process images string back into array
         const imageArray = values.images?.split('\n').map(url => url.trim()).filter(url => url) || [];
+        const tagsArray = values.tags?.split(',').map(tag => tag.trim().toLowerCase()).filter(tag => tag) || [];
 
-        console.log("Updating tool:", tool.id, "with values:", values);
-         console.log("Processed images for update:", imageArray);
+        const dataToUpdate: any = {
+            name: values.name,
+            description: values.description,
+            downloadUrl: values.downloadUrl,
+            version: values.version,
+            size: values.size,
+            category: values.category,
+            requiredPlan: values.requiredPlan,
+            images: imageArray,
+        };
+
+        if (values.category === 'loja') {
+            dataToUpdate.price = values.price || 0;
+            dataToUpdate.tags = tagsArray;
+        } else {
+             // If category is not 'loja', ensure price and tags are removed or nullified
+            dataToUpdate.price = null;
+            dataToUpdate.tags = [];
+        }
 
         const toolDocRef = doc(db, "tools", tool.id);
 
         try {
-            await updateDoc(toolDocRef, {
-                name: values.name,
-                description: values.description,
-                downloadUrl: values.downloadUrl,
-                version: values.version,
-                size: values.size,
-                category: values.category,
-                requiredPlan: values.requiredPlan, // Save updated requiredPlan
-                images: imageArray, // Save updated image array
-            });
+            await updateDoc(toolDocRef, dataToUpdate);
 
             toast({
                 title: "Ferramenta Atualizada!",
@@ -108,7 +115,7 @@ export default function EditToolForm({ setSection, tool }: EditToolFormProps) {
                 className: "bg-green-600 border-green-600 text-white"
             });
 
-            setSection('manage-tools'); // Go back to the list after successful update
+            setSection('manage-tools');
 
         } catch (error: any) {
             console.error("Error updating tool: ", error);
@@ -122,7 +129,6 @@ export default function EditToolForm({ setSection, tool }: EditToolFormProps) {
         }
     }
 
-    // Function to handle deletion
     async function handleDelete() {
          if (!db || !tool || !tool.id) {
             toast({ title: "Erro", description: "Não foi possível identificar a ferramenta para excluir.", variant: "destructive" });
@@ -130,7 +136,7 @@ export default function EditToolForm({ setSection, tool }: EditToolFormProps) {
          }
          setIsDeleting(true);
          const toolDocRef = doc(db, "tools", tool.id);
-         const toolName = tool.name; // Store name for toast
+         const toolName = tool.name;
 
          try {
             await deleteDoc(toolDocRef);
@@ -139,7 +145,7 @@ export default function EditToolForm({ setSection, tool }: EditToolFormProps) {
                 description: `A ferramenta "${toolName}" foi removida com sucesso.`,
                 variant: "default",
             });
-             setSection('manage-tools'); // Go back to list after delete
+             setSection('manage-tools');
 
          } catch (error: any) {
              console.error("Error deleting tool: ", error);
@@ -156,7 +162,6 @@ export default function EditToolForm({ setSection, tool }: EditToolFormProps) {
     return (
         <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 py-4">
-                 {/* Form fields are the same as AddToolForm, but pre-filled */}
                  <FormField
                     control={form.control}
                     name="name"
@@ -253,7 +258,6 @@ export default function EditToolForm({ setSection, tool }: EditToolFormProps) {
                     )}
                 />
 
-                {/* Images Field */}
                 <FormField
                     control={form.control}
                     name="images"
@@ -264,7 +268,7 @@ export default function EditToolForm({ setSection, tool }: EditToolFormProps) {
                                 <Textarea
                                     placeholder="Cole uma URL por linha..."
                                     {...field}
-                                    className="bg-input h-24" // Adjust height as needed
+                                    className="bg-input h-24"
                                 />
                             </FormControl>
                              <FormDescription className="text-xs text-muted-foreground">
@@ -274,8 +278,43 @@ export default function EditToolForm({ setSection, tool }: EditToolFormProps) {
                         </FormItem>
                     )}
                 />
+                
+                <div className={cn("grid grid-cols-1 md:grid-cols-2 gap-4 transition-all duration-300", selectedCategory === 'loja' ? 'opacity-100 max-h-40' : 'opacity-0 max-h-0 overflow-hidden')}>
+                    <FormField
+                        control={form.control}
+                        name="price"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel className="text-foreground">Preço (R$)</FormLabel>
+                                <FormControl>
+                                    <Input type="number" step="0.01" placeholder="Ex: 29.99" {...field} className="bg-input" />
+                                </FormControl>
+                                <FormDescription className="text-xs text-muted-foreground">
+                                   Apenas para itens da categoria 'Loja'. Deixe 0 para grátis.
+                                </FormDescription>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                    <FormField
+                        control={form.control}
+                        name="tags"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel className="text-foreground">Tags (separadas por vírgula)</FormLabel>
+                                <FormControl>
+                                    <Input placeholder="Ex: mapa, favela, pago" {...field} className="bg-input" />
+                                </FormControl>
+                                 <FormDescription className="text-xs text-muted-foreground">
+                                   Para filtrar itens na loja. Ex: mapa, favela, pago, etc.
+                                 </FormDescription>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                </div>
 
-                 {/* Select for Required Plan */}
+
                  <FormField
                     control={form.control}
                     name="requiredPlan"
@@ -310,9 +349,7 @@ export default function EditToolForm({ setSection, tool }: EditToolFormProps) {
                     )}
                  />
 
-                 {/* Action Buttons */}
                 <div className="flex justify-between items-center gap-2 mt-6 pt-4 border-t border-border">
-                     {/* Delete Button with Confirmation */}
                      <AlertDialog>
                         <AlertDialogTrigger asChild>
                             <Button type="button" variant="destructive" className="flex items-center gap-2" disabled={isSubmitting || isDeleting}>
@@ -336,7 +373,6 @@ export default function EditToolForm({ setSection, tool }: EditToolFormProps) {
                         </AlertDialogContent>
                      </AlertDialog>
 
-                    {/* Cancel and Save Buttons */}
                     <div className="flex gap-2">
                         <Button type="button" variant="secondary" onClick={() => setSection('manage-tools')} disabled={isSubmitting || isDeleting}>
                             Cancelar
