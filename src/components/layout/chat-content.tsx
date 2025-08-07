@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge"; // Import Badge
+import { Checkbox } from "@/components/ui/checkbox";
 
 import {
   DropdownMenu,
@@ -53,6 +54,7 @@ import type { UserProfile } from '@/components/page/home-client-page';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, Timestamp, doc, deleteDoc, updateDoc, arrayUnion, arrayRemove, getDoc, writeBatch, where, getDocs, setDoc } from 'firebase/firestore';
 import { useToast } from "@/hooks/use-toast";
+import { ranks, rankKeys, rankIcons } from '@/config/ranks';
 
 
 // --- Types ---
@@ -61,6 +63,7 @@ interface ChatCategory {
     name: string;
     order: number;
     createdAt: Timestamp;
+    allowedRanks?: string[]; // Array of rank keys
 }
 
 interface ChatChannel {
@@ -86,6 +89,7 @@ interface ChatMessage {
     uid: string;
     name: string;
     avatar: string | null;
+    rank?: string;
   };
   createdAt: Timestamp; // Using Firestore Timestamp
   replyTo?: ReplyInfo | null;
@@ -106,15 +110,15 @@ const SUPPORT_CHANNEL_ID = 'support-channel';
 const TICKETS_CATEGORY_ID = 'tickets-category';
 const TICKETS_ARCHIVED_CATEGORY_ID = 'tickets-archived-category';
 
-
 // Static Support Content
 const botMessage: ChatMessage = {
     id: 'bot-message-1',
     text: 'Bem-vindo ao canal de suporte! Se precisar de ajuda, clique no botão abaixo para abrir um ticket privado e nossa equipe irá atendê-lo.',
     user: {
         uid: 'bot',
-        name: 'STUDIO PECC', // The main name part
-        avatar: 'https://i.imgur.com/sXliRZl.png', // Logo as avatar
+        name: 'STUDIO PECC',
+        avatar: 'https://i.imgur.com/sXliRZl.png',
+        rank: 'admin',
     },
     createdAt: new Timestamp(new Date().getTime() / 1000, 0),
     isBotMessage: true,
@@ -126,6 +130,7 @@ const supportCategory: ChatCategory = {
   name: 'Suporte',
   order: -1, // Ensures it's always at the top
   createdAt: new Timestamp(0, 0),
+  allowedRanks: [], // Public
 };
 
 const supportChannel: ChatChannel = {
@@ -133,6 +138,19 @@ const supportChannel: ChatChannel = {
   name: 'suporte',
   categoryId: SUPPORT_CATEGORY_ID,
   createdAt: new Timestamp(0, 0),
+};
+
+// Helper function to render text with @mentions highlighted
+const renderMessageText = (text: string) => {
+    const mentionRegex = /(@[a-zA-Z0-9_À-ú]+)/g;
+    const parts = text.split(mentionRegex);
+
+    return parts.map((part, index) => {
+        if (mentionRegex.test(part)) {
+            return <strong key={index} className="bg-accent/50 text-accent-foreground rounded px-1">{part}</strong>;
+        }
+        return part;
+    });
 };
 
 
@@ -159,6 +177,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     const [selectedCategoryId, setSelectedCategoryId] = useState('');
     const [newCategoryName, setNewCategoryName] = useState('');
     const [newCategoryOrder, setNewCategoryOrder] = useState(0);
+    const [allowedRanks, setAllowedRanks] = useState<string[]>([]);
     const [itemToManage, setItemToManage] = useState<{ type: 'channel' | 'category', action: 'delete' | 'close', item: ChatChannel | ChatCategory } | null>(null);
 
 
@@ -191,12 +210,12 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
 
             if ((userProfile?.isAdmin || userHasOpenTickets) && !ticketsCategoryExists) {
                 allCategories.splice(1, 0, {
-                    id: TICKETS_CATEGORY_ID, name: 'Tickets', order: 0, createdAt: new Timestamp(0, 0),
+                    id: TICKETS_CATEGORY_ID, name: 'Tickets', order: 0, createdAt: new Timestamp(0, 0), allowedRanks: ['admin']
                 });
             }
              if ((userProfile?.isAdmin || userHasClosedTickets) && !archivedCategoryExists) {
                 allCategories.push({
-                    id: TICKETS_ARCHIVED_CATEGORY_ID, name: 'Tickets Finalizados', order: 99, createdAt: new Timestamp(0,0),
+                    id: TICKETS_ARCHIVED_CATEGORY_ID, name: 'Tickets Finalizados', order: 99, createdAt: new Timestamp(0,0), allowedRanks: ['admin']
                 });
              }
              
@@ -204,12 +223,22 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
              allCategories.sort((a,b) => a.order - b.order);
 
 
-            setCategories(allCategories);
+             // Filter categories based on user rank
+            const visibleCategories = allCategories.filter(cat => {
+                 if (userProfile?.isAdmin) return true; // Admins see all
+                 if (!cat.allowedRanks || cat.allowedRanks.length === 0) return true; // Public categories
+                 return cat.allowedRanks.includes(userProfile?.rank || '');
+             });
+
+
+            setCategories(visibleCategories);
 
             // --- Channels Logic ---
+            const visibleCategoryIds = visibleCategories.map(c => c.id);
             const visibleChannels = fetchedChannels.filter(channel => {
-                if (!channel.isPrivate) return true;
-                if (userProfile?.isAdmin) return true;
+                if (!visibleCategoryIds.includes(channel.categoryId)) return false; // Hide channels of hidden categories
+                if (!channel.isPrivate) return true; // Public channels in visible categories
+                if (userProfile?.isAdmin) return true; // Admins see all private channels
                 return channel.allowedUsers?.includes(userProfile?.uid || '');
             });
 
@@ -217,7 +246,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             setChannels(allVisibleChannels);
 
             // Set active channel logic
-            if (allVisibleChannels.length > 0 && !activeChannel) {
+            if (allVisibleChannels.length > 0 && (!activeChannel || !allVisibleChannels.some(c => c.id === activeChannel.id))) {
                 setActiveChannel(supportChannel);
             }
 
@@ -227,7 +256,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         } finally {
             setIsLoading(false);
         }
-    }, [userProfile?.uid, userProfile?.isAdmin, toast, activeChannel]);
+    }, [userProfile?.uid, userProfile?.isAdmin, userProfile?.rank, toast, activeChannel]);
 
 
     useEffect(() => {
@@ -315,7 +344,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
 
             await addDoc(collection(newChannelRef, 'messages'), {
                  text: `Olá ${userProfile.displayName}! Descreva seu problema em detalhes e um administrador irá respondê-lo em breve. Quando o problema for resolvido, você ou um administrador podem fechar este ticket.`,
-                 user: { uid: 'bot', name: 'STUDIO PECC', avatar: 'https://i.imgur.com/sXliRZl.png' },
+                 user: { uid: 'bot', name: 'STUDIO PECC', avatar: 'https://i.imgur.com/sXliRZl.png', rank: 'admin' },
                  createdAt: serverTimestamp(),
                  isBotMessage: true,
                  actions: [{ text: 'Fechar Ticket', actionId: 'close-ticket' }],
@@ -353,6 +382,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
           uid: userProfile.uid,
           name: userProfile.displayName,
           avatar: userProfile.photoURL,
+          rank: userProfile.rank,
         },
         createdAt: serverTimestamp(),
         replyTo: replyingTo ? {
@@ -434,6 +464,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         setEditingCategory(category || null);
         setNewCategoryName(category?.name || '');
         setNewCategoryOrder(category?.order || categories.length + 1);
+        setAllowedRanks(category?.allowedRanks || []);
         setIsCategoryModalOpen(true);
     };
 
@@ -480,13 +511,18 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         try {
             if (editingCategory) {
                 const categoryRef = doc(db, 'chatCategories', editingCategory.id);
-                await updateDoc(categoryRef, { name: newCategoryName.trim(), order: newCategoryOrder });
+                await updateDoc(categoryRef, {
+                    name: newCategoryName.trim(),
+                    order: newCategoryOrder,
+                    allowedRanks: allowedRanks,
+                });
                 toast({ title: "Categoria Atualizada!" });
             } else {
                 await addDoc(collection(db, 'chatCategories'), {
                     name: newCategoryName.trim(),
                     order: newCategoryOrder,
                     createdAt: serverTimestamp(),
+                    allowedRanks: allowedRanks,
                 });
                 toast({ title: "Categoria Criada!" });
             }
@@ -497,6 +533,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             setNewCategoryName('');
             setNewCategoryOrder(0);
             setEditingCategory(null);
+            setAllowedRanks([]);
         } catch (error) {
             console.error("Error saving category:", error);
             toast({ title: "Erro", description: "Não foi possível salvar a categoria.", variant: "destructive" });
@@ -526,7 +563,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                     });
                      await addDoc(collection(channelRef, 'messages'), {
                         text: `Este ticket foi encerrado e arquivado.`,
-                        user: { uid: 'bot', name: 'STUDIO PECC', avatar: 'https://i.imgur.com/sXliRZl.png' },
+                        user: { uid: 'bot', name: 'STUDIO PECC', avatar: 'https://i.imgur.com/sXliRZl.png', rank: 'admin' },
                         createdAt: serverTimestamp(),
                         isBotMessage: true,
                      });
@@ -559,6 +596,12 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         } finally {
             setItemToManage(null);
         }
+    };
+
+    const RankIcon = ({ rank }: { rank?: string }) => {
+        const Icon = rank ? rankIcons[rank] : null;
+        if (!Icon) return null;
+        return <Icon className="h-4 w-4 ml-1.5" />;
     };
 
 
@@ -755,11 +798,11 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                                        {msg.user.name}
                                     </div>
                                 ) : (
-                                    <p className="font-semibold text-foreground">{msg.user.name}</p>
+                                    <p className="font-semibold text-foreground flex items-center">{msg.user.name} <RankIcon rank={msg.user.rank} /></p>
                                 )}
                                 <p className="text-xs text-muted-foreground">{formatDate(msg.createdAt)}</p>
                             </div>
-                            <p className="text-sm text-foreground/90 whitespace-pre-wrap">{msg.text}</p>
+                            <div className="text-sm text-foreground/90 whitespace-pre-wrap">{renderMessageText(msg.text)}</div>
                              {msg.actions && msg.actions.length > 0 && !activeChannel?.isClosed && (
                                  <div className="mt-2 flex gap-2">
                                      {msg.actions.map(action => (
@@ -859,7 +902,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                                 <SelectValue placeholder="Selecione uma categoria" />
                             </SelectTrigger>
                             <SelectContent>
-                                {categories.filter(c => c.id !== SUPPORT_CATEGORY_ID).map(category => (
+                                {categories.filter(c => ![SUPPORT_CATEGORY_ID, TICKETS_CATEGORY_ID, TICKETS_ARCHIVED_CATEGORY_ID].includes(c.id)).map(category => (
                                     <SelectItem key={category.id} value={category.id}>
                                         {category.name}
                                     </SelectItem>
@@ -903,6 +946,33 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                             onChange={(e) => setNewCategoryOrder(Number(e.target.value))}
                             className="col-span-3"
                         />
+                    </div>
+                    <div className="grid grid-cols-4 items-start gap-4">
+                         <Label className="text-right pt-2">Cargos</Label>
+                         <div className="col-span-3 space-y-2">
+                             <p className="text-xs text-muted-foreground">Selecione quais cargos podem ver esta categoria. Deixe em branco para ser pública.</p>
+                             {rankKeys.map((rankKey) => (
+                                 <div key={rankKey} className="flex items-center space-x-2">
+                                     <Checkbox
+                                        id={`rank-${rankKey}`}
+                                        checked={allowedRanks.includes(rankKey)}
+                                        onCheckedChange={(checked) => {
+                                            setAllowedRanks(prev =>
+                                                checked
+                                                    ? [...prev, rankKey]
+                                                    : prev.filter(r => r !== rankKey)
+                                            );
+                                        }}
+                                     />
+                                     <label
+                                        htmlFor={`rank-${rankKey}`}
+                                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                     >
+                                         {ranks[rankKey]}
+                                     </label>
+                                 </div>
+                              ))}
+                         </div>
                     </div>
                 </div>
                 <DialogFooter>
