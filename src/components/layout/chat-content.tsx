@@ -209,12 +209,12 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         } finally {
             setIsLoading(false);
         }
-    }, [userProfile?.uid, userProfile?.isAdmin, activeChannel, toast]);
+    }, [userProfile?.uid, userProfile?.isAdmin, toast]);
 
 
     useEffect(() => {
         fetchSidebarData();
-    }, [fetchSidebarData]);
+    }, [fetchSidebarData, activeChannel]);
 
 
   // Firestore listener for messages
@@ -261,6 +261,10 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
    const handleBotActionClick = async (actionId: string) => {
         if (actionId === 'create-ticket') {
             await handleCreateTicket();
+        } else if (actionId === 'close-ticket') {
+            if (activeChannel) {
+                setItemToDelete({ type: 'channel', item: activeChannel });
+            }
         }
     };
 
@@ -283,7 +287,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             }
 
             // Create new private channel (ticket)
-            const ticketName = `ticket-${userProfile.displayName.toLowerCase().replace(/\\s/g, '-')}`;
+            const ticketName = `ticket-${userProfile.displayName.toLowerCase().replace(/\s/g, '-')}`;
             const newChannelRef = await addDoc(collection(db, 'chatChannels'), {
                 name: ticketName,
                 categoryId: TICKETS_CATEGORY_ID,
@@ -294,17 +298,18 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
 
              // Add a welcome message to the new ticket channel
             await addDoc(collection(newChannelRef, 'messages'), {
-                 text: `Olá ${userProfile.displayName}! Descreva seu problema em detalhes e um administrador irá respondê-lo em breve.`,
+                 text: `Olá ${userProfile.displayName}! Descreva seu problema em detalhes e um administrador irá respondê-lo em breve. Quando o problema for resolvido, você ou um administrador podem fechar este ticket.`,
                  user: { uid: 'bot', name: 'STUDIO PECC', avatar: 'https://i.imgur.com/sXliRZl.png' },
                  createdAt: serverTimestamp(),
                  isBotMessage: true,
+                 actions: [{ text: 'Fechar Ticket', actionId: 'close-ticket' }],
             });
 
             toast({ title: "Ticket Criado!", description: `O canal #${ticketName} foi criado.`, className: "bg-green-600 text-white" });
             
             // Refetch channels to include the new one and navigate to it
-            const newChannel = { id: newChannelRef.id, name: ticketName, categoryId: TICKETS_CATEGORY_ID, isPrivate: true, allowedUsers: [userProfile.uid] };
-            setChannels(prev => [...prev, newChannel]);
+            const newChannel = { id: newChannelRef.id, name: ticketName, categoryId: TICKETS_CATEGORY_ID, isPrivate: true, allowedUsers: [userProfile.uid], createdAt: new Timestamp(Date.now() / 1000, 0) };
+            setChannels(prev => [...prev, newChannel].sort((a, b) => a.createdAt.seconds - b.createdAt.seconds));
             setActiveChannel(newChannel);
 
         } catch (error) {
@@ -495,6 +500,10 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                 // TODO: Also delete all messages within the channel in a batch
                 await deleteDoc(doc(db, 'chatChannels', channel.id));
                 setChannels(prev => prev.filter(c => c.id !== channel.id));
+                // If the deleted channel was active, switch to support channel
+                if (activeChannel?.id === channel.id) {
+                    setActiveChannel(supportChannel);
+                }
                 toast({ title: "Canal Excluído", description: `O canal #${channel.name} foi removido.` });
             } else if (type === 'category') {
                 const category = item as ChatCategory;
@@ -505,6 +514,9 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                 channelsToDelete.forEach(c => {
                     // TODO: Also delete all messages within each channel
                     batch.delete(doc(db, 'chatChannels', c.id));
+                     if (activeChannel?.categoryId === c.categoryId) {
+                        setActiveChannel(supportChannel);
+                    }
                 });
 
                 // Delete the category itself
@@ -712,8 +724,8 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                             <div className="flex items-baseline gap-2">
                                {msg.user.uid === 'bot' ? (
                                     <div className="flex items-center gap-1.5">
-                                        <p className="font-semibold text-foreground">
-                                          <Badge className="bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 mr-1.5">BOT</Badge>
+                                        <p className="font-semibold text-foreground flex items-center gap-1.5">
+                                          <Badge className="bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5">BOT</Badge>
                                            {msg.user.name}
                                         </p>
                                     </div>
@@ -727,8 +739,9 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                                  <div className="mt-2 flex gap-2">
                                      {msg.actions.map(action => (
                                          <Button key={action.actionId} size="sm" onClick={() => handleBotActionClick(action.actionId)} disabled={isCreatingTicket}>
-                                             {isCreatingTicket ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <TicketIcon className="mr-2 h-4 w-4" />}
-                                             {isCreatingTicket ? 'Criando...' : action.text}
+                                             {action.actionId === 'create-ticket' && (isCreatingTicket ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <TicketIcon className="mr-2 h-4 w-4" />)}
+                                             {action.actionId === 'close-ticket' && <Trash2 className="mr-2 h-4 w-4" />}
+                                             {isCreatingTicket && action.actionId === 'create-ticket' ? 'Criando...' : action.text}
                                         </Button>
                                      ))}
                                  </div>
@@ -895,3 +908,5 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     </div>
   );
 }
+
+    
