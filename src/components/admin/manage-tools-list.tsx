@@ -194,7 +194,8 @@ const ManageToolsList = ({ setSection, onEditTool }: ManageToolsListProps) => {
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            tools.map((tool) => (<TableRow key={tool.id}>
+                            tools.map((tool) => (
+                                <TableRow key={tool.id}>
                                     <TableCell className="font-medium text-foreground">{tool.name}</TableCell>
                                     <TableCell className="text-muted-foreground">{getCategoryName(tool.category)}</TableCell>
                                     <TableCell className="text-muted-foreground">{tool.version}</TableCell>
