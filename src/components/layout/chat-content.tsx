@@ -118,6 +118,19 @@ const botMessage: ChatMessage = {
     actions: [{ text: 'Abrir Ticket', actionId: 'create-ticket' }],
 };
 
+const supportCategory: ChatCategory = {
+  id: SUPPORT_CATEGORY_ID,
+  name: 'Suporte',
+  order: -1, // Ensures it's always at the top
+  createdAt: new Timestamp(0, 0),
+};
+
+const supportChannel: ChatChannel = {
+  id: SUPPORT_CHANNEL_ID,
+  name: 'suporte',
+  categoryId: SUPPORT_CATEGORY_ID,
+};
+
 
 export default function ChatContent({ userProfile }: ChatContentProps) {
     const [categories, setCategories] = useState<ChatCategory[]>([]);
@@ -699,8 +712,10 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                             <div className="flex items-baseline gap-2">
                                {msg.user.uid === 'bot' ? (
                                     <div className="flex items-center gap-1.5">
-                                        <Badge className="bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5">BOT</Badge>
-                                        <p className="font-semibold text-foreground">{msg.user.name}</p>
+                                        <p className="font-semibold text-foreground">
+                                          <Badge className="bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 mr-1.5">BOT</Badge>
+                                           {msg.user.name}
+                                        </p>
                                     </div>
                                 ) : (
                                     <p className="font-semibold text-foreground">{msg.user.name}</p>
