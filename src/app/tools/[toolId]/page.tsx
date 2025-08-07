@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ArrowLeft, Download, Lock, Star, Info, Wrench } from 'lucide-react'; // Import icons
 import type { Tool } from '@/components/layout/tools-content'; // Import Tool type
 import type { UserProfile } from '@/components/admin/manage-users'; // Import UserProfile
+import Header from '@/components/layout/header'; // Import the standard Header
 
 // Helper function to determine if the user can access the tool
 const canUserAccessTool = (
@@ -28,7 +29,7 @@ const canUserAccessTool = (
 
 export default function ToolDetailPage() {
     const [tool, setTool] = useState<Tool | null>(null);
-    const [isLoading, setIsLoading] =useState(true);
+    const [isLoading, setIsLoading] = useState(true);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null); // Add state for user profile
     const router = useRouter();
@@ -106,15 +107,21 @@ export default function ToolDetailPage() {
 
         fetchToolDetails();
     }, [toolId, router]);
+    
+    const handleSignOut = async () => {
+      if (auth) {
+        await auth.signOut();
+        router.push('/');
+      }
+    };
 
     if (isLoading) {
         return (
             <div className="flex flex-col min-h-screen bg-background">
                  <header className="bg-card px-6 py-3 flex items-center justify-between shadow-md h-[var(--header-height)]">
-                    <Skeleton className="h-8 w-24" />
-                    <Skeleton className="h-8 w-36" />
-                    <Skeleton className="h-8 w-24" />
-                </header>
+                    <Skeleton className="h-8 w-48" />
+                    <Skeleton className="h-9 w-9 rounded-full" />
+                 </header>
                 <main className="flex-1 container mx-auto py-12 px-4 sm:px-6 lg:px-8">
                     <Skeleton className="h-10 w-32 mb-6" />
                     <Skeleton className="h-64 w-full mb-6" />
@@ -148,20 +155,25 @@ export default function ToolDetailPage() {
 
     return (
         <div className="flex flex-col min-h-screen bg-background text-foreground">
-             {/* Simplified Header for Detail Page */}
-             <header className="bg-card px-4 md:px-6 py-3 flex items-center justify-between shadow-md h-[var(--header-height)] sticky top-0 z-30">
-                <Button variant="outline" onClick={() => router.push('/#ferramentas')} className="text-sm">
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    Voltar
-                </Button>
-                <h1 className="text-lg md:text-xl font-semibold text-foreground truncate px-4">
-                    {tool.name}
-                </h1>
-                 {/* Placeholder for potential right-side actions */}
-                <div className="w-20"></div> {/* Balance the header */}
-            </header>
+            <Header
+                activeTab={'ferramentas'} // Keep 'ferramentas' as active
+                setActiveTab={(tab) => router.push(`/#${tab}`)}
+                isLoggedIn={!!currentUser}
+                onSignOut={handleSignOut}
+                userName={userProfile?.displayName}
+                userRank={userProfile?.rank}
+                isAdmin={userProfile?.isAdmin ?? false}
+                userAvatarUrl={userProfile?.photoURL}
+             />
 
             <main className="flex-1 container mx-auto py-8 md:py-12 px-4 sm:px-6 lg:px-8">
+                {/* Back Button */}
+                 <div className="mb-6 flex justify-start">
+                    <Button variant="outline" onClick={() => router.push('/#ferramentas')} className="text-sm">
+                        <ArrowLeft className="mr-2 h-4 w-4" />
+                        Voltar para Ferramentas
+                    </Button>
+                </div>
                 <Card className="max-w-4xl mx-auto bg-card shadow-xl border-border rounded-lg overflow-hidden">
                      {/* Image Carousel/Display */}
                      {tool.images && tool.images.length > 0 && (
