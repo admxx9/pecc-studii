@@ -9,7 +9,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Hash, Send, UserCircle, MessageSquareReply, Smile, MoreHorizontal, Loader2, X, Trash2, Copy as CopyIcon, Settings, Plus, GripVertical, Edit, Lock, Ticket as TicketIcon } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogClose, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -18,7 +18,7 @@ import {
     AlertDialogDescription,
     AlertDialogFooter,
     AlertDialogHeader,
-    AlertDialogTitle,
+    AlertDialogTitle as AlertDialogTitleComponent, // Renamed to avoid conflict
 } from "@/components/ui/alert-dialog";
 import {
     Select,
@@ -132,6 +132,7 @@ const supportChannel: ChatChannel = {
   categoryId: SUPPORT_CATEGORY_ID,
   createdAt: new Timestamp(0, 0),
 };
+
 
 // Helper function to render text with @mentions highlighted
 const renderMessageText = (text: string) => {
@@ -1065,7 +1066,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         <AlertDialog open={!!itemToManage} onOpenChange={(open) => !open && setItemToManage(null)}>
             <AlertDialogContent>
                 <AlertDialogHeader>
-                    <AlertDialogTitle>Confirmar Ação</AlertDialogTitle>
+                    <AlertDialogTitleComponent>Confirmar Ação</AlertDialogTitleComponent>
                     <AlertDialogDescription>
                         {itemToManage?.action === 'delete' && `Tem certeza que quer excluir? Esta ação não pode ser desfeita.`}
                         {itemToManage?.action === 'close' && `Tem certeza que quer encerrar este ticket? Ele será arquivado e não poderá mais receber mensagens.`}
