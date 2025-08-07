@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useMemo } from 'react';
@@ -11,7 +10,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Button } from "@/components/ui/button"; // Import Button
 import type { ActiveTab, Lesson as PageLesson } from '@/app/page';
 import { cn } from '@/lib/utils';
-import { LayoutGrid, PencilRuler, Code, Boxes, Cog, VideoOff, CheckCircle, Star } from 'lucide-react';
+import { LayoutGrid, PencilRuler, Code, Boxes, Cog, VideoOff, CheckCircle, Star, ShoppingCart } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface Lesson extends PageLesson {}
@@ -28,6 +27,7 @@ const toolCategories: ToolCategory[] = [
     { id: 'scripts', name: 'Scripts', icon: Code },
     { id: 'modelos', name: 'Modelos 3D', icon: Boxes },
     { id: 'geral', name: 'Geral', icon: Cog },
+    { id: 'loja', name: 'Loja', icon: ShoppingCart },
 ];
 
 interface SidebarProps {

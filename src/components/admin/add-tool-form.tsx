@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState } from 'react';
@@ -29,7 +28,7 @@ import {
 import { db } from "@/lib/firebase"; // Import Firestore instance
 import { collection, addDoc, serverTimestamp } from "firebase/firestore"; // Import Firestore functions
 import { useToast } from "@/hooks/use-toast";
-import { LayoutGrid, PencilRuler, Code, Boxes, Cog, Star } from 'lucide-react'; // Icons for categories, added Star
+import { LayoutGrid, PencilRuler, Code, Boxes, Cog, Star, ShoppingCart } from 'lucide-react'; // Icons for categories, added Star and ShoppingCart
 
 // Define categories - must match IDs used in Sidebar/ToolsContent
 export const toolCategories = [
@@ -38,6 +37,7 @@ export const toolCategories = [
     { id: 'scripts', name: 'Scripts', icon: Code },
     { id: 'modelos', name: 'Modelos 3D', icon: Boxes },
     { id: 'geral', name: 'Geral', icon: Cog },
+    { id: 'loja', name: 'Loja', icon: ShoppingCart },
 ];
 const categoryIds = toolCategories.map(cat => cat.id) as [string, ...string[]]; // For Zod enum
 

@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -37,6 +36,7 @@ const toolCategoriesMap = {
   'scripts': 'Scripts',
   'modelos': 'Modelos 3D',
   'geral': 'Geral',
+  'loja': 'Loja',
 };
 
 const getCategoryName = (categoryId: string): string => {

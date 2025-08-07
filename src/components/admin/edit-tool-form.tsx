@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -29,7 +28,7 @@ import {
 import { db } from "@/lib/firebase";
 import { doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
-import { LayoutGrid, PencilRuler, Code, Boxes, Cog, Trash2, Star } from 'lucide-react'; // Added Star
+import { LayoutGrid, PencilRuler, Code, Boxes, Cog, Trash2, Star, ShoppingCart } from 'lucide-react'; // Added Star and ShoppingCart
 import { toolCategories, toolFormSchema, ToolFormData } from './add-tool-form'; // Import shared elements
 import type { Tool } from '@/components/layout/tools-content'; // Import Tool type
 import {
