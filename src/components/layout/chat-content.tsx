@@ -28,6 +28,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge"; // Import Badge
 
 import {
   DropdownMenu,
@@ -104,23 +105,12 @@ const TICKETS_CATEGORY_ID = 'tickets-category';
 
 
 // --- Static Support Content ---
-const supportCategory: ChatCategory = {
-    id: SUPPORT_CATEGORY_ID,
-    name: 'Suporte',
-    order: -1, // Always on top
-    createdAt: new Timestamp(0, 0),
-};
-const supportChannel: ChatChannel = {
-    id: SUPPORT_CHANNEL_ID,
-    name: 'suporte',
-    categoryId: SUPPORT_CATEGORY_ID,
-};
 const botMessage: ChatMessage = {
     id: 'bot-message-1',
     text: 'Bem-vindo ao canal de suporte! Se precisar de ajuda, clique no botão abaixo para abrir um ticket privado e nossa equipe irá atendê-lo.',
     user: {
         uid: 'bot',
-        name: 'STUDIO PECC Bot',
+        name: 'STUDIO PECC', // The main name part
         avatar: 'https://i.imgur.com/sXliRZl.png', // Logo as avatar
     },
     createdAt: new Timestamp(new Date().getTime() / 1000, 0),
@@ -292,7 +282,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
              // Add a welcome message to the new ticket channel
             await addDoc(collection(newChannelRef, 'messages'), {
                  text: `Olá ${userProfile.displayName}! Descreva seu problema em detalhes e um administrador irá respondê-lo em breve.`,
-                 user: { uid: 'bot', name: 'STUDIO PECC Bot', avatar: 'https://i.imgur.com/sXliRZl.png' },
+                 user: { uid: 'bot', name: 'STUDIO PECC', avatar: 'https://i.imgur.com/sXliRZl.png' },
                  createdAt: serverTimestamp(),
                  isBotMessage: true,
             });
@@ -707,7 +697,14 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                                 </button>
                             )}
                             <div className="flex items-baseline gap-2">
-                                <p className="font-semibold text-foreground">{msg.user.name}</p>
+                               {msg.user.uid === 'bot' ? (
+                                    <div className="flex items-center gap-1.5">
+                                        <Badge className="bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5">BOT</Badge>
+                                        <p className="font-semibold text-foreground">{msg.user.name}</p>
+                                    </div>
+                                ) : (
+                                    <p className="font-semibold text-foreground">{msg.user.name}</p>
+                                )}
                                 <p className="text-xs text-muted-foreground">{formatDate(msg.createdAt)}</p>
                             </div>
                             <p className="text-sm text-foreground/90 whitespace-pre-wrap">{msg.text}</p>
