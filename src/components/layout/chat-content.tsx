@@ -155,70 +155,62 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     };
 
 
-    // --- Data Fetching ---
-    useEffect(() => {
+    const fetchSidebarData = useCallback(async () => {
         if (!db) return;
         setIsLoading(true);
 
-        const fetchSidebarData = async () => {
-             // Define queries
-             const categoriesQuery = query(collection(db, 'chatCategories'), orderBy('order', 'asc'));
-             const channelsQuery = userProfile
-                 ? query(collection(db, 'chatChannels'), where('allowedUsers', 'array-contains', userProfile.uid))
-                 : query(collection(db, 'chatChannels'), where('isPrivate', '!=', true));
+        try {
+            const categoriesQuery = query(collection(db, 'chatCategories'), orderBy('order', 'asc'));
+            const channelsQuery = query(collection(db, 'chatChannels'), orderBy('createdAt', 'asc'));
 
+            const [categoriesSnapshot, channelsSnapshot] = await Promise.all([
+                getDocs(categoriesQuery),
+                getDocs(channelsQuery)
+            ]);
 
-            try {
-                const [categoriesSnapshot, channelsSnapshot] = await Promise.all([
-                    getDocs(categoriesQuery),
-                    getDocs(query(collection(db, 'chatChannels'), orderBy('createdAt', 'asc'))) // Fetch all for admin view logic
-                ]);
+            const fetchedCategories = categoriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatCategory[];
+            const fetchedChannels = channelsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatChannel[];
 
-                const fetchedCategories = categoriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatCategory[];
-                const fetchedChannels = channelsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatChannel[];
-                
-                // Add static support category
-                 const allCategories = [supportCategory, ...fetchedCategories];
-                 // Ensure "Tickets" category exists for admins or users with tickets
-                 const userHasTickets = fetchedChannels.some(c => c.isPrivate && c.allowedUsers?.includes(userProfile?.uid || ''));
-                 const ticketsCategoryExists = allCategories.some(c => c.id === TICKETS_CATEGORY_ID);
+            const allCategories = [supportCategory, ...fetchedCategories];
+            const userHasTickets = fetchedChannels.some(c => c.isPrivate && c.allowedUsers?.includes(userProfile?.uid || ''));
+            const ticketsCategoryExists = allCategories.some(c => c.id === TICKETS_CATEGORY_ID);
 
-                 if ((userProfile?.isAdmin || userHasTickets) && !ticketsCategoryExists) {
-                    allCategories.splice(1, 0, { // Add after support
-                        id: TICKETS_CATEGORY_ID,
-                        name: 'Tickets',
-                        order: 0,
-                        createdAt: new Timestamp(0, 0),
-                    });
-                 }
-
-
-                setCategories(allCategories);
-
-                // Filter channels for the current user
-                const visibleChannels = fetchedChannels.filter(channel => {
-                    if (!channel.isPrivate) return true; // Public channels are always visible
-                    if (userProfile?.isAdmin) return true; // Admins see all private channels
-                    return channel.allowedUsers?.includes(userProfile?.uid || ''); // Users see their own private channels
+            if ((userProfile?.isAdmin || userHasTickets) && !ticketsCategoryExists) {
+                allCategories.splice(1, 0, {
+                    id: TICKETS_CATEGORY_ID,
+                    name: 'Tickets',
+                    order: 0,
+                    createdAt: new Timestamp(0, 0),
                 });
-
-                setChannels([supportChannel, ...visibleChannels]);
-
-
-                if (visibleChannels.length > 0 && !activeChannel) {
-                    setActiveChannel(supportChannel);
-                }
-
-            } catch (error) {
-                console.error("Error fetching sidebar data:", error);
-                toast({ title: "Erro", description: "Não foi possível carregar os canais.", variant: "destructive" });
-            } finally {
-                setIsLoading(false);
             }
-        };
 
+            setCategories(allCategories);
+
+            const visibleChannels = fetchedChannels.filter(channel => {
+                if (!channel.isPrivate) return true;
+                if (userProfile?.isAdmin) return true;
+                return channel.allowedUsers?.includes(userProfile?.uid || '');
+            });
+
+            const allVisibleChannels = [supportChannel, ...visibleChannels];
+            setChannels(allVisibleChannels);
+
+            if (allVisibleChannels.length > 0 && !activeChannel) {
+                setActiveChannel(supportChannel);
+            }
+
+        } catch (error) {
+            console.error("Error fetching sidebar data:", error);
+            toast({ title: "Erro", description: "Não foi possível carregar os canais.", variant: "destructive" });
+        } finally {
+            setIsLoading(false);
+        }
+    }, [db, userProfile?.uid, userProfile?.isAdmin, activeChannel, toast]);
+
+
+    useEffect(() => {
         fetchSidebarData();
-    }, [toast, userProfile]);
+    }, [fetchSidebarData]);
 
 
   // Firestore listener for messages
@@ -287,7 +279,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             }
 
             // Create new private channel (ticket)
-            const ticketName = `ticket-${userProfile.displayName.toLowerCase().replace(/s/g, '-')}`;
+            const ticketName = `ticket-${userProfile.displayName.toLowerCase().replace(/\\s/g, '-')}`;
             const newChannelRef = await addDoc(collection(db, 'chatChannels'), {
                 name: ticketName,
                 categoryId: TICKETS_CATEGORY_ID,
