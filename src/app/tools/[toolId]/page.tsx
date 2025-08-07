@@ -10,10 +10,22 @@ import { User } from 'firebase/auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, Download, Lock, Star, Info, Wrench } from 'lucide-react'; // Import icons
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+    DialogClose
+} from "@/components/ui/dialog";
+import { ArrowLeft, Download, Lock, Star, Info, Wrench, Gift, QrCode, Copy, Loader2, ShoppingCart, Ticket } from 'lucide-react'; // Import icons
 import type { Tool } from '@/components/layout/tools-content'; // Import Tool type
 import type { UserProfile } from '@/components/admin/manage-users'; // Import UserProfile
 import Header from '@/components/layout/header'; // Import the standard Header
+import { useToast } from "@/hooks/use-toast";
+import { Input } from "@/components/ui/input";
+
 
 // Helper function to determine if the user can access the tool
 const canUserAccessTool = (
@@ -31,52 +43,56 @@ export default function ToolDetailPage() {
     const [tool, setTool] = useState<Tool | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
-    const [userProfile, setUserProfile] = useState<UserProfile | null>(null); // Add state for user profile
+    const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+    const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
+    const [purchaseView, setPurchaseView] = useState<'buy' | 'redeem' | 'pix'>('buy');
+    const [pixData, setPixData] = useState<{ qr_code_text: string, qr_code_url: string } | null>(null);
+    const [isGeneratingPix, setIsGeneratingPix] = useState(false);
+    const [redemptionCode, setRedemptionCode] = useState('');
+    const [isRedeeming, setIsRedeeming] = useState(false);
+
     const router = useRouter();
     const params = useParams();
-    const toolId = params?.toolId as string; // Get toolId from URL
+    const { toast } = useToast();
+    const toolId = params?.toolId as string;
 
-    // Listen for auth state changes
     useEffect(() => {
       const unsubscribe = auth.onAuthStateChanged((user) => {
         setCurrentUser(user);
          if (!user) {
-            setUserProfile(null); // Clear profile if user logs out
+            setUserProfile(null);
         }
       });
-      return () => unsubscribe(); // Cleanup listener on unmount
+      return () => unsubscribe();
     }, []);
 
-     // Fetch user profile data (including premiumPlanType) when currentUser changes
      useEffect(() => {
         const fetchUserProfile = async () => {
              if (!currentUser || !db) {
-                 setUserProfile(null); // Clear profile if no user or db
+                 setUserProfile(null);
                  return;
              }
             const userDocRef = doc(db, 'users', currentUser.uid);
             try {
                 const docSnap = await getDoc(userDocRef);
                 if (docSnap.exists()) {
-                    setUserProfile({ id: docSnap.id, ...docSnap.data() } as UserProfile); // Set user profile data
+                    setUserProfile({ id: docSnap.id, ...docSnap.data() } as UserProfile);
                 } else {
-                    setUserProfile(null); // User profile doesn't exist
+                    setUserProfile(null);
                 }
             } catch (e) {
                 console.error("Error fetching user profile:", e);
-                 setUserProfile(null); // Clear profile on error
+                 setUserProfile(null);
             }
         };
         fetchUserProfile();
     }, [currentUser]);
 
-    // Fetch tool details based on toolId
     useEffect(() => {
         const fetchToolDetails = async () => {
             if (!toolId || !db) {
                 setIsLoading(false);
                 console.error("Tool ID or DB not available");
-                // Optionally redirect to a 404 page or show error
                 return;
             }
             setIsLoading(true);
@@ -86,20 +102,18 @@ export default function ToolDetailPage() {
                 if (docSnap.exists()) {
                     setTool({
                          id: docSnap.id,
-                         requiredPlan: docSnap.data().requiredPlan || 'none', // Fetch requiredPlan
-                         images: docSnap.data().images ?? [], // Fetch images, default to empty
-                         specifications: docSnap.data().specifications ?? {}, // Fetch specs, default to empty obj
+                         requiredPlan: docSnap.data().requiredPlan || 'none',
+                         images: docSnap.data().images ?? [],
+                         specifications: docSnap.data().specifications ?? {},
                           ...docSnap.data()
                         } as Tool);
                 } else {
                     console.log("No such tool document!");
-                    setTool(null); // Handle tool not found
-                     // Optionally redirect or show not found message
-                     // router.push('/tools/not-found');
+                    setTool(null);
                 }
             } catch (error) {
                 console.error("Error fetching tool details:", error);
-                setTool(null); // Handle error state
+                setTool(null);
             } finally {
                 setIsLoading(false);
             }
@@ -108,11 +122,58 @@ export default function ToolDetailPage() {
         fetchToolDetails();
     }, [toolId, router]);
     
-    const handleSignOut = async () => {
+     const handleSignOut = async () => {
       if (auth) {
         await auth.signOut();
         router.push('/');
       }
+    };
+
+    const handleGeneratePix = async () => {
+        if (!tool || !currentUser || !userProfile) {
+            toast({ title: "Erro", description: "Você precisa estar logado para gerar um pagamento.", variant: "destructive" });
+            return;
+        }
+        setIsGeneratingPix(true);
+        try {
+            const response = await fetch('/api/checkout/pagbank', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    planId: tool.id,
+                    planName: tool.name,
+                    amount: tool.price,
+                    userId: currentUser.uid,
+                    userName: userProfile.displayName,
+                    userEmail: userProfile.email,
+                }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Falha ao gerar o QR Code PIX.');
+            }
+
+            const data = await response.json();
+            setPixData(data);
+            setPurchaseView('pix');
+
+        } catch (error: any) {
+            toast({ title: "Erro no Pagamento", description: error.message, variant: "destructive" });
+        } finally {
+            setIsGeneratingPix(false);
+        }
+    };
+    
+    const handleCopyPixCode = () => {
+        if (!pixData) return;
+        navigator.clipboard.writeText(pixData.qr_code_text);
+        toast({ title: "Sucesso", description: "Código PIX Copia e Cola copiado!" });
+    };
+
+    const handleRedeemCode = async () => {
+        // TODO: Implement redemption logic similar to premium page
+        toast({ title: "Em Breve", description: "A funcionalidade de resgatar códigos para itens da loja será implementada em breve.", variant: "default" });
     };
 
     if (isLoading) {
@@ -149,14 +210,92 @@ export default function ToolDetailPage() {
         );
     }
 
-    // Determine if the tool is locked based on user's plan
     const isLocked = !canUserAccessTool(tool.requiredPlan, userProfile?.premiumPlanType);
+
+    const renderPurchaseModalContent = () => {
+        if (purchaseView === 'pix') {
+            return (
+                <>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2"><QrCode /> Pague com PIX</DialogTitle>
+                        <DialogDescription>Escaneie o QR Code com seu app de banco ou use o código Copia e Cola.</DialogDescription>
+                    </DialogHeader>
+                    {pixData?.qr_code_url ? (
+                        <div className="flex flex-col items-center gap-4 py-4">
+                            <Image src={pixData.qr_code_url} alt="PIX QR Code" width={250} height={250} className="rounded-md border p-2" />
+                            <Button onClick={handleCopyPixCode} variant="outline" className="w-full">
+                                <Copy className="mr-2 h-4 w-4" />
+                                Copiar Código PIX
+                            </Button>
+                             <p className="text-xs text-muted-foreground text-center">Após o pagamento, você receberá o código de resgate no seu email ou poderá retirá-lo no Discord.</p>
+                        </div>
+                    ) : (
+                         <div className="flex justify-center items-center h-48">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                         </div>
+                    )}
+                     <DialogClose asChild>
+                         <Button variant="secondary" onClick={() => setPurchaseView('buy')}>Voltar</Button>
+                    </DialogClose>
+                </>
+            );
+        }
+        if (purchaseView === 'redeem') {
+             return (
+                 <>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2"><Ticket /> Resgatar Código</DialogTitle>
+                        <DialogDescription>Insira o código do produto que você adquiriu.</DialogDescription>
+                    </DialogHeader>
+                    <div className="flex flex-col gap-2 py-4">
+                         <Input
+                            type="text"
+                            placeholder="SEU-CODIGO-AQUI"
+                            value={redemptionCode}
+                            onChange={(e) => setRedemptionCode(e.target.value)}
+                            className="flex-grow bg-input text-base uppercase"
+                            disabled={isRedeeming}
+                        />
+                         <div className="flex flex-col sm:flex-row gap-2 mt-2">
+                             <Button variant="outline" onClick={() => setPurchaseView('buy')} disabled={isRedeeming} className="w-full sm:w-auto">
+                                <ArrowLeft className="mr-2 h-4 w-4"/> Voltar
+                            </Button>
+                            <Button onClick={handleRedeemCode} disabled={isRedeeming} className="w-full sm:w-auto bg-primary hover:bg-primary/90 flex-grow">
+                                {isRedeeming ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Ativando...</> : "Ativar Produto"}
+                            </Button>
+                        </div>
+                    </div>
+                </>
+             )
+        }
+        // Default 'buy' view
+        return (
+            <>
+                <DialogHeader>
+                    <DialogTitle>Adquirir: {tool.name}</DialogTitle>
+                    <DialogDescription>Escolha como deseja obter este item.</DialogDescription>
+                </DialogHeader>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+                     <Button variant="default" size="lg" className="h-auto py-4 flex flex-col gap-2" onClick={handleGeneratePix} disabled={isGeneratingPix}>
+                         {isGeneratingPix ? <Loader2 className="h-6 w-6 animate-spin" /> : <QrCode className="h-6 w-6" />}
+                        <span className="font-semibold">Obter via PIX</span>
+                        <span className="text-xs font-normal text-primary-foreground/80">Pague com QR Code ou Copia e Cola.</span>
+                    </Button>
+                    <Button variant="secondary" size="lg" className="h-auto py-4 flex flex-col gap-2" onClick={() => setPurchaseView('redeem')}>
+                        <Ticket className="h-6 w-6"/>
+                        <span className="font-semibold">Resgatar Código</span>
+                        <span className="text-xs font-normal text-secondary-foreground/80">Já tem um código? Insira aqui.</span>
+                    </Button>
+                </div>
+            </>
+        );
+    };
 
 
     return (
         <div className="flex flex-col min-h-screen bg-background text-foreground">
             <Header
-                activeTab={'ferramentas'} // Keep 'ferramentas' as active
+                activeTab={'ferramentas'}
                 setActiveTab={(tab) => router.push(`/#${tab}`)}
                 isLoggedIn={!!currentUser}
                 onSignOut={handleSignOut}
@@ -167,7 +306,6 @@ export default function ToolDetailPage() {
              />
 
             <main className="flex-1 container mx-auto py-8 md:py-12 px-4 sm:px-6 lg:px-8">
-                {/* Back Button */}
                  <div className="mb-6 flex justify-start">
                     <Button variant="outline" onClick={() => router.push('/#ferramentas')} className="text-sm">
                         <ArrowLeft className="mr-2 h-4 w-4" />
@@ -175,15 +313,13 @@ export default function ToolDetailPage() {
                     </Button>
                 </div>
                 <Card className="max-w-4xl mx-auto bg-card shadow-xl border-border rounded-lg overflow-hidden">
-                     {/* Image Carousel/Display */}
                      {tool.images && tool.images.length > 0 && (
                         <div className="relative h-64 md:h-80 bg-secondary flex items-center justify-center overflow-hidden">
-                            {/* Basic image display for now, could be a carousel later */}
                             <Image
-                                src={tool.images[0]} // Display the first image
+                                src={tool.images[0]}
                                 alt={`${tool.name} preview`}
                                 fill
-                                style={{ objectFit: 'contain' }} // Use style object for objectFit
+                                style={{ objectFit: 'contain' }}
                                 priority
                                 data-ai-hint="tool image"
                             />
@@ -192,25 +328,21 @@ export default function ToolDetailPage() {
 
                     <CardHeader className="p-4 md:p-6">
                         <CardTitle className="text-2xl md:text-3xl font-semibold text-foreground flex items-center gap-2">
-                             {/* Show star if requiredPlan is basic or pro */}
                              {(tool.requiredPlan === 'basic' || tool.requiredPlan === 'pro') && <Star className="w-6 h-6 text-yellow-500 flex-shrink-0" />}
                             {tool.name}
                         </CardTitle>
                         <CardDescription className="text-muted-foreground pt-1">
                             {tool.description}
                         </CardDescription>
-                         {/* Basic Info: Version, Size, Category */}
                          <div className="text-sm text-muted-foreground mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t pt-3">
                             <span>Versão: <span className="font-medium text-foreground/90">{tool.version}</span></span>
                             <span>Tamanho: <span className="font-medium text-foreground/90">{tool.size}</span></span>
                             <span>Categoria: <span className="font-medium text-foreground/90">{tool.category}</span></span>
-                             {/* Display required plan */}
                              <span>Plano: <span className="font-medium text-foreground/90 capitalize">{tool.requiredPlan || 'Nenhum'}</span></span>
                         </div>
                     </CardHeader>
 
                     <CardContent className="p-4 md:p-6 pt-0">
-                         {/* Specifications Section */}
                          {tool.specifications && Object.keys(tool.specifications).length > 0 && (
                             <div className="mt-4 border-t pt-4">
                                 <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center gap-2">
@@ -226,25 +358,26 @@ export default function ToolDetailPage() {
                             </div>
                         )}
 
-                        {/* Download/Premium Button */}
                         <div className="mt-6 border-t pt-6 flex justify-end">
-                            {isLocked ? (
-                                <Button
-                                    variant="outline"
-                                    size="lg"
-                                    className="border-yellow-500 text-yellow-600 hover:bg-yellow-500/10 hover:text-yellow-700 transition-colors"
-                                    onClick={() => router.push('/premium')}
-                                >
+                             {tool.category === 'loja' ? (
+                                <Dialog open={isPurchaseModalOpen} onOpenChange={(open) => { setIsPurchaseModalOpen(open); if (!open) { setPurchaseView('buy'); setPixData(null); } }}>
+                                     <DialogTrigger asChild>
+                                         <Button variant="default" size="lg" className="bg-primary hover:bg-primary/90">
+                                            <ShoppingCart className="mr-2 h-5 w-5" />
+                                            {tool.price && tool.price > 0 ? `Comprar por R$ ${tool.price.toFixed(2).replace('.', ',')}` : 'Adquirir (Grátis)'}
+                                        </Button>
+                                    </DialogTrigger>
+                                     <DialogContent>
+                                        {renderPurchaseModalContent()}
+                                    </DialogContent>
+                                </Dialog>
+                            ) : isLocked ? (
+                                <Button variant="outline" size="lg" className="border-yellow-500 text-yellow-600 hover:bg-yellow-500/10 hover:text-yellow-700" onClick={() => router.push('/premium')}>
                                     <Lock className="mr-2 h-5 w-5" />
                                     Ver Planos Premium para Baixar {tool.requiredPlan && `(${tool.requiredPlan})`}
                                 </Button>
                             ) : (
-                                <Button
-                                    variant="default"
-                                    size="lg"
-                                    asChild
-                                    className="bg-primary hover:bg-primary/90"
-                                >
+                                <Button variant="default" size="lg" asChild className="bg-primary hover:bg-primary/90">
                                     <a href={tool.downloadUrl} target="_blank" rel="noopener noreferrer">
                                         <Download className="mr-2 h-5 w-5" />
                                         Download ({tool.size})
@@ -258,3 +391,4 @@ export default function ToolDetailPage() {
         </div>
     );
 }
+

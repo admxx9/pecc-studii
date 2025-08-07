@@ -85,3 +85,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Ocorreu um erro inesperado.' }, { status: 500 });
   }
 }
+
