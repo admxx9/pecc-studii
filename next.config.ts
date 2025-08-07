@@ -64,6 +64,12 @@ const nextConfig: NextConfig = {
         hostname: 'sandbox.api.pagseguro.com',
         port: '',
         pathname: '/**',
+      },
+      { // Add this block for GTA5-Mods Images
+        protocol: 'https',
+        hostname: 'img.gta5-mods.com',
+        port: '',
+        pathname: '/**',
       }
     ],
   },
