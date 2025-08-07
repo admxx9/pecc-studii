@@ -19,7 +19,6 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
     Select,
@@ -30,7 +29,6 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 
-
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,6 +36,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+    ContextMenu,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import {
   Popover,
   PopoverContent,
@@ -430,53 +434,41 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             <Accordion type="multiple" defaultValue={categories.map(c => c.id)} className="w-full">
                 {categories.map(category => (
                     <AccordionItem value={category.id} key={category.id} className="border-b-0 group">
-                        <div className="flex items-center justify-between group">
-                            <AccordionTrigger className="flex-1 text-xs font-semibold uppercase text-muted-foreground hover:text-foreground py-1 px-2">
-                                {category.name}
-                            </AccordionTrigger>
-                            {userProfile?.isAdmin && (
-                                 <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100">
-                                            <Settings className="h-3 w-3" />
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent>
-                                        <DropdownMenuItem onSelect={() => handleOpenCategoryModal(category)}>Editar Categoria</DropdownMenuItem>
-                                        <DropdownMenuItem onSelect={() => setItemToDelete({ type: 'category', item: category })} className="text-destructive">Excluir Categoria</DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            )}
-                        </div>
+                        <ContextMenu>
+                            <ContextMenuTrigger disabled={!userProfile?.isAdmin}>
+                                <div className="flex items-center justify-between group">
+                                        <AccordionTrigger className="flex-1 text-xs font-semibold uppercase text-muted-foreground hover:text-foreground py-1 px-2 rounded-md">
+                                            {category.name}
+                                        </AccordionTrigger>
+                                </div>
+                            </ContextMenuTrigger>
+                            <ContextMenuContent>
+                                <ContextMenuItem onSelect={() => handleOpenCategoryModal(category)}>Editar Categoria</ContextMenuItem>
+                                <ContextMenuItem onSelect={() => setItemToDelete({ type: 'category', item: category })} className="text-destructive">Excluir Categoria</ContextMenuItem>
+                            </ContextMenuContent>
+                        </ContextMenu>
                         <AccordionContent className="pl-2 pb-1">
                             <nav className="space-y-1">
                                 {channels.filter(c => c.categoryId === category.id).map(channel => (
-                                    <div key={channel.id} className="flex items-center group/channel">
-                                        <Button
-                                            variant="ghost"
-                                            onClick={() => handleChannelClick(channel)}
-                                            className={cn(
-                                                'w-full justify-start text-muted-foreground',
-                                                activeChannel?.id === channel.id && 'bg-accent text-accent-foreground'
-                                            )}
-                                        >
-                                            <Hash className="mr-2 h-4 w-4" />
-                                            {channel.name}
-                                        </Button>
-                                         {userProfile?.isAdmin && (
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover/channel:opacity-100">
-                                                        <Settings className="h-3 w-3" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent>
-                                                    <DropdownMenuItem onSelect={() => handleOpenChannelModal(channel.categoryId, channel)}>Editar Canal</DropdownMenuItem>
-                                                    <DropdownMenuItem onSelect={() => setItemToDelete({ type: 'channel', item: channel })} className="text-destructive">Excluir Canal</DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        )}
-                                    </div>
+                                    <ContextMenu key={channel.id}>
+                                        <ContextMenuTrigger disabled={!userProfile?.isAdmin}>
+                                            <Button
+                                                variant="ghost"
+                                                onClick={() => handleChannelClick(channel)}
+                                                className={cn(
+                                                    'w-full justify-start text-muted-foreground',
+                                                    activeChannel?.id === channel.id && 'bg-accent text-accent-foreground'
+                                                )}
+                                            >
+                                                <Hash className="mr-2 h-4 w-4" />
+                                                {channel.name}
+                                            </Button>
+                                        </ContextMenuTrigger>
+                                        <ContextMenuContent>
+                                            <ContextMenuItem onSelect={() => handleOpenChannelModal(channel.categoryId, channel)}>Editar Canal</ContextMenuItem>
+                                            <ContextMenuItem onSelect={() => setItemToDelete({ type: 'channel', item: channel })} className="text-destructive">Excluir Canal</ContextMenuItem>
+                                        </ContextMenuContent>
+                                    </ContextMenu>
                                 ))}
                             </nav>
                         </AccordionContent>
@@ -759,5 +751,3 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     </div>
   );
 }
-
-    
