@@ -291,13 +291,13 @@ export default function ToolsContent({ selectedCategory }: ToolsContentProps) {
                                                     <span>Categoria: <span className="font-medium text-foreground/90">{tool.category}</span></span>
                                                 </div>
                                             </div>
-                                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-auto">
-                                                {tool.price !== undefined && tool.category === 'loja' && (
+                                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-auto gap-2">
+                                                 {tool.price !== undefined && tool.category === 'loja' && (
                                                     <div className="text-lg font-bold text-primary mb-2 sm:mb-0">
                                                         {tool.price > 0 ? `R$ ${tool.price.toFixed(2).replace('.', ',')}` : 'Grátis'}
                                                     </div>
-                                                )}
-                                                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto self-end">
+                                                 )}
+                                                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto self-end sm:ml-auto">
                                                     <Button
                                                         variant="secondary"
                                                         size="sm"
@@ -326,7 +326,7 @@ export default function ToolsContent({ selectedCategory }: ToolsContentProps) {
                                                             size="sm"
                                                             onClick={() => handleDownloadClick(tool)}
                                                             className="hover:bg-primary hover:text-primary-foreground transition-colors w-full sm:w-auto"
-                                                            disabled={isCurrentlyDownloading || isCurrentlyNavigating}
+                                                            disabled={isCurrentlyDownloading || isCurrentlyDownloading}
                                                         >
                                                             {isCurrentlyDownloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
                                                             Download
