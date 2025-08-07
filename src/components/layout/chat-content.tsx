@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Hash, Send, UserCircle, MessageSquareReply, Smile, MoreHorizontal, Loader2, X, Trash2, Copy as CopyIcon, Settings, Plus, GripVertical, Edit } from 'lucide-react';
+import { Hash, Send, UserCircle, MessageSquareReply, Smile, MoreHorizontal, Loader2, X, Trash2, Copy as CopyIcon, Settings, Plus, GripVertical, Edit, Lock, Ticket as TicketIcon } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import {
@@ -50,7 +50,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { UserProfile } from '@/components/page/home-client-page';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, Timestamp, doc, deleteDoc, updateDoc, arrayUnion, arrayRemove, getDoc, writeBatch, where, getDocs } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, Timestamp, doc, deleteDoc, updateDoc, arrayUnion, arrayRemove, getDoc, writeBatch, where, getDocs, setDoc } from 'firebase/firestore';
 import { useToast } from "@/hooks/use-toast";
 
 
@@ -66,6 +66,8 @@ interface ChatChannel {
     id: string;
     name: string;
     categoryId: string;
+    isPrivate?: boolean; // For tickets
+    allowedUsers?: string[]; // UIDs of users who can see it
 }
 
 interface ReplyInfo {
@@ -85,6 +87,8 @@ interface ChatMessage {
   createdAt: Timestamp; // Using Firestore Timestamp
   replyTo?: ReplyInfo | null;
   reactions?: { [emoji: string]: string[] }; // Map of emoji to array of user UIDs
+  isBotMessage?: boolean; // Flag for bot messages
+  actions?: { text: string; actionId: string }[];
 }
 
 interface ChatContentProps {
@@ -92,6 +96,11 @@ interface ChatContentProps {
 }
 
 const EMOJI_LIST = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🤔'];
+
+// Static Support Channel & Category IDs
+const SUPPORT_CATEGORY_ID = 'support-category';
+const SUPPORT_CHANNEL_ID = 'support-channel';
+const TICKETS_CATEGORY_ID = 'tickets-category';
 
 
 export default function ChatContent({ userProfile }: ChatContentProps) {
@@ -101,6 +110,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [newMessage, setNewMessage] = useState('');
     const [isLoading, setIsLoading] = useState(true);
+    const [isCreatingTicket, setIsCreatingTicket] = useState(false);
     const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
     const scrollAreaRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -119,29 +129,84 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     const [itemToDelete, setItemToDelete] = useState<{ type: 'channel' | 'category', item: ChatChannel | ChatCategory } | null>(null);
 
 
+     // --- Static Support Content ---
+    const supportCategory: ChatCategory = {
+        id: SUPPORT_CATEGORY_ID,
+        name: 'Suporte',
+        order: -1, // Always on top
+        createdAt: new Timestamp(0, 0),
+    };
+    const supportChannel: ChatChannel = {
+        id: SUPPORT_CHANNEL_ID,
+        name: 'suporte',
+        categoryId: SUPPORT_CATEGORY_ID,
+    };
+     const botMessage: ChatMessage = {
+        id: 'bot-message-1',
+        text: 'Bem-vindo ao canal de suporte! Se precisar de ajuda, clique no botão abaixo para abrir um ticket privado e nossa equipe irá atendê-lo.',
+        user: {
+            uid: 'bot',
+            name: 'STUDIO PECC Bot',
+            avatar: 'https://i.imgur.com/sXliRZl.png', // Logo as avatar
+        },
+        createdAt: new Timestamp(new Date().getTime() / 1000, 0),
+        isBotMessage: true,
+        actions: [{ text: 'Abrir Ticket', actionId: 'create-ticket' }],
+    };
+
+
     // --- Data Fetching ---
     useEffect(() => {
         if (!db) return;
         setIsLoading(true);
 
         const fetchSidebarData = async () => {
-            const categoriesQuery = query(collection(db, 'chatCategories'), orderBy('order', 'asc'));
-            const channelsQuery = query(collection(db, 'chatChannels'), orderBy('createdAt', 'asc'));
+             // Define queries
+             const categoriesQuery = query(collection(db, 'chatCategories'), orderBy('order', 'asc'));
+             const channelsQuery = userProfile
+                 ? query(collection(db, 'chatChannels'), where('allowedUsers', 'array-contains', userProfile.uid))
+                 : query(collection(db, 'chatChannels'), where('isPrivate', '!=', true));
+
 
             try {
                 const [categoriesSnapshot, channelsSnapshot] = await Promise.all([
                     getDocs(categoriesQuery),
-                    getDocs(channelsQuery)
+                    getDocs(query(collection(db, 'chatChannels'), orderBy('createdAt', 'asc'))) // Fetch all for admin view logic
                 ]);
 
                 const fetchedCategories = categoriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatCategory[];
                 const fetchedChannels = channelsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatChannel[];
+                
+                // Add static support category
+                 const allCategories = [supportCategory, ...fetchedCategories];
+                 // Ensure "Tickets" category exists for admins or users with tickets
+                 const userHasTickets = fetchedChannels.some(c => c.isPrivate && c.allowedUsers?.includes(userProfile?.uid || ''));
+                 const ticketsCategoryExists = allCategories.some(c => c.id === TICKETS_CATEGORY_ID);
 
-                setCategories(fetchedCategories);
-                setChannels(fetchedChannels);
+                 if ((userProfile?.isAdmin || userHasTickets) && !ticketsCategoryExists) {
+                    allCategories.splice(1, 0, { // Add after support
+                        id: TICKETS_CATEGORY_ID,
+                        name: 'Tickets',
+                        order: 0,
+                        createdAt: new Timestamp(0, 0),
+                    });
+                 }
 
-                if (fetchedChannels.length > 0 && !activeChannel) {
-                    setActiveChannel(fetchedChannels[0]);
+
+                setCategories(allCategories);
+
+                // Filter channels for the current user
+                const visibleChannels = fetchedChannels.filter(channel => {
+                    if (!channel.isPrivate) return true; // Public channels are always visible
+                    if (userProfile?.isAdmin) return true; // Admins see all private channels
+                    return channel.allowedUsers?.includes(userProfile?.uid || ''); // Users see their own private channels
+                });
+
+                setChannels([supportChannel, ...visibleChannels]);
+
+
+                if (visibleChannels.length > 0 && !activeChannel) {
+                    setActiveChannel(supportChannel);
                 }
 
             } catch (error) {
@@ -153,13 +218,15 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         };
 
         fetchSidebarData();
-
-        // Consider adding snapshot listeners here for real-time category/channel updates if needed
-    }, [toast, activeChannel]);
+    }, [toast, userProfile]);
 
 
   // Firestore listener for messages
   useEffect(() => {
+     if (activeChannel?.id === SUPPORT_CHANNEL_ID) {
+        setMessages([botMessage]);
+        return;
+    }
     if (!db || !activeChannel) {
         setMessages([]);
         return;
@@ -180,7 +247,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     });
 
     return () => unsubscribe();
-  }, [activeChannel, toast]);
+  }, [activeChannel, toast, botMessage]);
 
 
   // Scroll to bottom when new messages are added
@@ -195,9 +262,66 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
 
 
   // --- Event Handlers ---
+   const handleBotActionClick = async (actionId: string) => {
+        if (actionId === 'create-ticket') {
+            await handleCreateTicket();
+        }
+    };
+
+    const handleCreateTicket = async () => {
+        if (!userProfile || !db) {
+            toast({ title: "Erro", description: "Você precisa estar logado para criar um ticket.", variant: "destructive" });
+            return;
+        }
+        setIsCreatingTicket(true);
+        try {
+            // Check if user already has an open ticket to prevent spam
+            const ticketsQuery = query(collection(db, 'chatChannels'), where('isPrivate', '==', true), where('allowedUsers', 'array-contains', userProfile.uid));
+            const existingTickets = await getDocs(ticketsQuery);
+            if (!existingTickets.empty) {
+                toast({ title: "Ticket Existente", description: "Você já possui um ticket aberto. Nossa equipe entrará em contato em breve.", variant: "default", className: "bg-yellow-500 border-yellow-500 text-black" });
+                // Navigate to existing ticket
+                const existingTicketChannel = { id: existingTickets.docs[0].id, ...existingTickets.docs[0].data() } as ChatChannel;
+                setActiveChannel(existingTicketChannel);
+                return;
+            }
+
+            // Create new private channel (ticket)
+            const ticketName = `ticket-${userProfile.displayName.toLowerCase().replace(/s/g, '-')}`;
+            const newChannelRef = await addDoc(collection(db, 'chatChannels'), {
+                name: ticketName,
+                categoryId: TICKETS_CATEGORY_ID,
+                isPrivate: true,
+                allowedUsers: [userProfile.uid], // Initially only the user can see it (admins logic is separate)
+                createdAt: serverTimestamp(),
+            });
+
+             // Add a welcome message to the new ticket channel
+            await addDoc(collection(newChannelRef, 'messages'), {
+                 text: `Olá ${userProfile.displayName}! Descreva seu problema em detalhes e um administrador irá respondê-lo em breve.`,
+                 user: { uid: 'bot', name: 'STUDIO PECC Bot', avatar: 'https://i.imgur.com/sXliRZl.png' },
+                 createdAt: serverTimestamp(),
+                 isBotMessage: true,
+            });
+
+            toast({ title: "Ticket Criado!", description: `O canal #${ticketName} foi criado.`, className: "bg-green-600 text-white" });
+            
+            // Refetch channels to include the new one and navigate to it
+            const newChannel = { id: newChannelRef.id, name: ticketName, categoryId: TICKETS_CATEGORY_ID, isPrivate: true, allowedUsers: [userProfile.uid] };
+            setChannels(prev => [...prev, newChannel]);
+            setActiveChannel(newChannel);
+
+        } catch (error) {
+            console.error("Error creating ticket:", error);
+            toast({ title: "Erro ao Criar Ticket", description: "Não foi possível criar seu ticket.", variant: "destructive" });
+        } finally {
+            setIsCreatingTicket(false);
+        }
+    };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newMessage.trim() === '' || !userProfile || !db || !activeChannel) return;
+    if (newMessage.trim() === '' || !userProfile || !db || !activeChannel || activeChannel.id === SUPPORT_CHANNEL_ID) return;
 
     const messagesCol = collection(db, 'chatChannels', activeChannel.id, 'messages');
 
@@ -230,6 +354,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     };
 
     const handleReplyClick = (message: ChatMessage) => {
+        if(message.isBotMessage) return;
         setReplyingTo(message);
         inputRef.current?.focus();
     };
@@ -237,7 +362,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     const cancelReply = () => setReplyingTo(null);
 
     const handleDeleteMessage = async (messageId: string) => {
-        if (!db || !activeChannel) return;
+        if (!db || !activeChannel || activeChannel.id === SUPPORT_CHANNEL_ID) return;
         const isOwner = messages.find(m => m.id === messageId)?.user.uid === userProfile?.uid;
         if (!isOwner && !userProfile?.isAdmin) {
             toast({ title: "Acesso Negado", description: "Você não tem permissão para excluir esta mensagem.", variant: "destructive" });
@@ -253,7 +378,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     };
 
     const handleReaction = async (message: ChatMessage, emoji: string) => {
-        if (!userProfile || !db || !activeChannel) return;
+        if (!userProfile || !db || !activeChannel || message.isBotMessage) return;
         const messageRef = doc(db, 'chatChannels', activeChannel.id, 'messages', message.id);
         const usersWhoReacted = message.reactions?.[emoji] || [];
         const userHasReacted = usersWhoReacted.includes(userProfile.uid);
@@ -307,6 +432,8 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                 await addDoc(collection(db, 'chatChannels'), {
                     name: channelName.trim(),
                     categoryId: selectedCategoryId,
+                    isPrivate: false,
+                    allowedUsers: [],
                     createdAt: serverTimestamp(),
                 });
                 toast({ title: "Canal Criado!" });
@@ -314,7 +441,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             // Refresh local state (simple refetch for now)
              const channelsSnapshot = await getDocs(query(collection(db, 'chatChannels'), orderBy('createdAt', 'asc')));
              const fetchedChannels = channelsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatChannel[];
-             setChannels(fetchedChannels);
+             setChannels([supportChannel, ...fetchedChannels]);
 
             setIsChannelModalOpen(false);
             setEditingChannel(null);
@@ -349,7 +476,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             // Refetch categories to update the list
             const categoriesSnapshot = await getDocs(query(collection(db, 'chatCategories'), orderBy('order', 'asc')));
             const fetchedCategories = categoriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatCategory[];
-            setCategories(fetchedCategories);
+            setCategories([supportCategory, ...fetchedCategories]);
 
             setIsCategoryModalOpen(false);
             setNewCategoryName('');
@@ -435,7 +562,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                 {categories.map(category => (
                     <AccordionItem value={category.id} key={category.id} className="border-b-0 group">
                         <ContextMenu>
-                            <ContextMenuTrigger disabled={!userProfile?.isAdmin}>
+                            <ContextMenuTrigger disabled={!userProfile?.isAdmin || category.id === SUPPORT_CATEGORY_ID || category.id === TICKETS_CATEGORY_ID}>
                                 <div className="flex items-center justify-between group">
                                         <AccordionTrigger className="flex-1 text-xs font-semibold uppercase text-muted-foreground hover:text-foreground py-1 px-2 rounded-md">
                                             {category.name}
@@ -451,7 +578,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                             <nav className="space-y-1">
                                 {channels.filter(c => c.categoryId === category.id).map(channel => (
                                     <ContextMenu key={channel.id}>
-                                        <ContextMenuTrigger disabled={!userProfile?.isAdmin}>
+                                        <ContextMenuTrigger disabled={!userProfile?.isAdmin || channel.id === SUPPORT_CHANNEL_ID}>
                                             <Button
                                                 variant="ghost"
                                                 onClick={() => handleChannelClick(channel)}
@@ -460,7 +587,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                                                     activeChannel?.id === channel.id && 'bg-accent text-accent-foreground'
                                                 )}
                                             >
-                                                <Hash className="mr-2 h-4 w-4" />
+                                                {channel.isPrivate ? <Lock className="mr-2 h-4 w-4" /> : <Hash className="mr-2 h-4 w-4" />}
                                                 {channel.name}
                                             </Button>
                                         </ContextMenuTrigger>
@@ -483,7 +610,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Chat Header */}
         <header className="flex items-center h-14 border-b border-border px-4 flex-shrink-0">
-          <Hash className="h-5 w-5 text-muted-foreground" />
+          {activeChannel?.isPrivate ? <Lock className="h-5 w-5 text-muted-foreground" /> : <Hash className="h-5 w-5 text-muted-foreground" />}
           <h1 className="text-lg font-semibold text-foreground ml-1">
             {activeChannel?.name || 'Selecione um canal'}
           </h1>
@@ -498,7 +625,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                         <MessageSquareReply className="h-12 w-12 mb-4" />
                         <p>Selecione um canal para começar a conversar.</p>
                      </div>
-                  ) : messages.length === 0 ? (
+                  ) : messages.length === 0 && activeChannel.id !== SUPPORT_CHANNEL_ID ? (
                       <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                           <p className="text-sm">Seja o primeiro a enviar uma mensagem em #{activeChannel.name}!</p>
                       </div>
@@ -507,65 +634,67 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                       const canDelete = userProfile?.isAdmin || userProfile?.uid === msg.user.uid;
                       return (
                         <div key={msg.id} id={`message-${msg.id}`} className="group relative flex items-start gap-3 p-2 rounded-md hover:bg-accent/5">
-                         <div className="absolute top-0 right-2 -mt-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                            <div className="flex items-center gap-1 bg-card border border-border rounded-md shadow-md p-1">
-                               <Popover>
-                                 <PopoverTrigger asChild>
-                                   <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
-                                     <Smile className="h-4 w-4" />
-                                     <span className="sr-only">Adicionar Reação</span>
-                                   </Button>
-                                 </PopoverTrigger>
-                                 <PopoverContent className="w-auto p-1 bg-card border-border">
-                                   <div className="flex gap-1">
-                                     {EMOJI_LIST.map(emoji => (
-                                       <Button
-                                         key={emoji}
-                                         variant="ghost"
-                                         size="icon"
-                                         className="h-7 w-7 text-lg rounded-full"
-                                         onClick={() => handleReaction(msg, emoji)}
-                                       >
-                                         {emoji}
-                                       </Button>
-                                     ))}
-                                   </div>
-                                 </PopoverContent>
-                               </Popover>
+                         {!msg.isBotMessage && (
+                            <div className="absolute top-0 right-2 -mt-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                                <div className="flex items-center gap-1 bg-card border border-border rounded-md shadow-md p-1">
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
+                                        <Smile className="h-4 w-4" />
+                                        <span className="sr-only">Adicionar Reação</span>
+                                    </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-1 bg-card border-border">
+                                    <div className="flex gap-1">
+                                        {EMOJI_LIST.map(emoji => (
+                                        <Button
+                                            key={emoji}
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7 text-lg rounded-full"
+                                            onClick={() => handleReaction(msg, emoji)}
+                                        >
+                                            {emoji}
+                                        </Button>
+                                        ))}
+                                    </div>
+                                    </PopoverContent>
+                                </Popover>
 
-                                <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground" onClick={() => handleReplyClick(msg)}>
-                                 <MessageSquareReply className="h-4 w-4" />
-                                  <span className="sr-only">Responder</span>
-                               </Button>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                       <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
-                                         <MoreHorizontal className="h-4 w-4" />
-                                         <span className="sr-only">Mais</span>
-                                       </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="bg-card border-border">
-                                        <DropdownMenuItem onSelect={() => handleReplyClick(msg)} className="cursor-pointer">
-                                             <MessageSquareReply className="mr-2 h-4 w-4" />
-                                            <span>Responder</span>
-                                        </DropdownMenuItem>
-                                         <DropdownMenuItem onSelect={() => handleCopyText(msg.text)} className="cursor-pointer">
-                                            <CopyIcon className="mr-2 h-4 w-4" />
-                                            <span>Copiar Texto</span>
-                                        </DropdownMenuItem>
-                                        {canDelete && (
-                                          <>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem onSelect={() => handleDeleteMessage(msg.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer">
-                                                <Trash2 className="mr-2 h-4 w-4" />
-                                                <span>Excluir Mensagem</span>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground" onClick={() => handleReplyClick(msg)}>
+                                    <MessageSquareReply className="h-4 w-4" />
+                                    <span className="sr-only">Responder</span>
+                                    </Button>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
+                                            <MoreHorizontal className="h-4 w-4" />
+                                            <span className="sr-only">Mais</span>
+                                        </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="bg-card border-border">
+                                            <DropdownMenuItem onSelect={() => handleReplyClick(msg)} className="cursor-pointer">
+                                                <MessageSquareReply className="mr-2 h-4 w-4" />
+                                                <span>Responder</span>
                                             </DropdownMenuItem>
-                                          </>
-                                        )}
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
+                                            <DropdownMenuItem onSelect={() => handleCopyText(msg.text)} className="cursor-pointer">
+                                                <CopyIcon className="mr-2 h-4 w-4" />
+                                                <span>Copiar Texto</span>
+                                            </DropdownMenuItem>
+                                            {canDelete && (
+                                            <>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem onSelect={() => handleDeleteMessage(msg.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer">
+                                                    <Trash2 className="mr-2 h-4 w-4" />
+                                                    <span>Excluir Mensagem</span>
+                                                </DropdownMenuItem>
+                                            </>
+                                            )}
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
                             </div>
-                         </div>
+                         )}
 
                         <Avatar className="h-10 w-10 border">
                             <AvatarImage src={msg.user.avatar || undefined} />
@@ -588,7 +717,17 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                                 <p className="font-semibold text-foreground">{msg.user.name}</p>
                                 <p className="text-xs text-muted-foreground">{formatDate(msg.createdAt)}</p>
                             </div>
-                            <p className="text-sm text-foreground/90">{msg.text}</p>
+                            <p className="text-sm text-foreground/90 whitespace-pre-wrap">{msg.text}</p>
+                             {msg.actions && msg.actions.length > 0 && (
+                                 <div className="mt-2 flex gap-2">
+                                     {msg.actions.map(action => (
+                                         <Button key={action.actionId} size="sm" onClick={() => handleBotActionClick(action.actionId)} disabled={isCreatingTicket}>
+                                             {isCreatingTicket ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <TicketIcon className="mr-2 h-4 w-4" />}
+                                             {isCreatingTicket ? 'Criando...' : action.text}
+                                        </Button>
+                                     ))}
+                                 </div>
+                             )}
                              {msg.reactions && Object.keys(msg.reactions).length > 0 && (
                                <div className="mt-1 flex flex-wrap gap-1">
                                  {Object.entries(msg.reactions).map(([emoji, uids]) => {
@@ -644,9 +783,9 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                   placeholder={activeChannel ? `Conversar em #${activeChannel.name}` : 'Selecione um canal para conversar'}
                   className={cn("flex-1 bg-input", replyingTo && "rounded-t-none")}
                   autoComplete="off"
-                  disabled={!userProfile || !activeChannel}
+                  disabled={!userProfile || !activeChannel || activeChannel.id === SUPPORT_CHANNEL_ID}
                 />
-                <Button type="submit" size="icon" className="flex-shrink-0" disabled={!userProfile || !activeChannel || newMessage.trim() === ''}>
+                <Button type="submit" size="icon" className="flex-shrink-0" disabled={!userProfile || !activeChannel || newMessage.trim() === '' || activeChannel.id === SUPPORT_CHANNEL_ID}>
                   <Send className="h-4 w-4" />
                 </Button>
             </form>
@@ -677,7 +816,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                                 <SelectValue placeholder="Selecione uma categoria" />
                             </SelectTrigger>
                             <SelectContent>
-                                {categories.map(category => (
+                                {categories.filter(c => c.id !== SUPPORT_CATEGORY_ID).map(category => (
                                     <SelectItem key={category.id} value={category.id}>
                                         {category.name}
                                     </SelectItem>
