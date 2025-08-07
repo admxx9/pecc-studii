@@ -611,7 +611,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                             <nav className="space-y-1">
                                 {channels.filter(c => c.categoryId === category.id).map(channel => (
                                     <ContextMenu key={channel.id}>
-                                        <ContextMenuTrigger disabled={!userProfile?.isAdmin || channel.id === SUPPORT_CHANNEL_ID}>
+                                        <ContextMenuTrigger disabled={!userProfile?.isAdmin || channel.id === SUPPORT_CHANNEL_ID || channel.isClosed}>
                                             <Button
                                                 variant="ghost"
                                                 onClick={() => handleChannelClick(channel)}
@@ -626,9 +626,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                                         </ContextMenuTrigger>
                                         <ContextMenuContent>
                                             <ContextMenuItem onSelect={() => handleOpenChannelModal(channel.categoryId, channel)}>Editar Canal</ContextMenuItem>
-                                             {channel.isPrivate ? (
-                                                <ContextMenuItem onSelect={() => setItemToManage({ type: 'channel', action: 'close', item: channel })} className="text-destructive">Encerrar Ticket</ContextMenuItem>
-                                             ) : (
+                                             {channel.id !== SUPPORT_CHANNEL_ID && (
                                                 <ContextMenuItem onSelect={() => setItemToManage({ type: 'channel', action: 'delete', item: channel })} className="text-destructive">Excluir Canal</ContextMenuItem>
                                              )}
                                         </ContextMenuContent>
