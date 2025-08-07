@@ -70,6 +70,7 @@ interface ChatChannel {
     isPrivate?: boolean; // For tickets
     allowedUsers?: string[]; // UIDs of users who can see it
     createdAt: Timestamp;
+    isClosed?: boolean; // Flag for closed tickets
 }
 
 interface ReplyInfo {
@@ -103,8 +104,10 @@ const EMOJI_LIST = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '�
 const SUPPORT_CATEGORY_ID = 'support-category';
 const SUPPORT_CHANNEL_ID = 'support-channel';
 const TICKETS_CATEGORY_ID = 'tickets-category';
+const TICKETS_ARCHIVED_CATEGORY_ID = 'tickets-archived-category';
 
-// --- Static Support Content ---
+
+// Static Support Content
 const botMessage: ChatMessage = {
     id: 'bot-message-1',
     text: 'Bem-vindo ao canal de suporte! Se precisar de ajuda, clique no botão abaixo para abrir um ticket privado e nossa equipe irá atendê-lo.',
@@ -132,6 +135,7 @@ const supportChannel: ChatChannel = {
   createdAt: new Timestamp(0, 0),
 };
 
+
 export default function ChatContent({ userProfile }: ChatContentProps) {
     const [categories, setCategories] = useState<ChatCategory[]>([]);
     const [channels, setChannels] = useState<ChatChannel[]>([]);
@@ -155,7 +159,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     const [selectedCategoryId, setSelectedCategoryId] = useState('');
     const [newCategoryName, setNewCategoryName] = useState('');
     const [newCategoryOrder, setNewCategoryOrder] = useState(0);
-    const [itemToDelete, setItemToDelete] = useState<{ type: 'channel' | 'category', item: ChatChannel | ChatCategory } | null>(null);
+    const [itemToManage, setItemToManage] = useState<{ type: 'channel' | 'category', action: 'delete' | 'close', item: ChatChannel | ChatCategory } | null>(null);
 
 
 
@@ -175,21 +179,34 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             const fetchedCategories = categoriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatCategory[];
             const fetchedChannels = channelsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatChannel[];
 
-            const allCategories = [supportCategory, ...fetchedCategories];
-            const userHasTickets = fetchedChannels.some(c => c.isPrivate && c.allowedUsers?.includes(userProfile?.uid || ''));
-            const ticketsCategoryExists = allCategories.some(c => c.id === TICKETS_CATEGORY_ID);
+            // --- Categories Logic ---
+            let allCategories = [supportCategory, ...fetchedCategories];
 
-            if ((userProfile?.isAdmin || userHasTickets) && !ticketsCategoryExists) {
+            const userHasOpenTickets = fetchedChannels.some(c => c.categoryId === TICKETS_CATEGORY_ID && (userProfile?.isAdmin || c.allowedUsers?.includes(userProfile?.uid || '')));
+            const userHasClosedTickets = fetchedChannels.some(c => c.categoryId === TICKETS_ARCHIVED_CATEGORY_ID && (userProfile?.isAdmin || c.allowedUsers?.includes(userProfile?.uid || '')));
+
+            const ticketsCategoryExists = allCategories.some(c => c.id === TICKETS_CATEGORY_ID);
+            const archivedCategoryExists = allCategories.some(c => c.id === TICKETS_ARCHIVED_CATEGORY_ID);
+
+
+            if ((userProfile?.isAdmin || userHasOpenTickets) && !ticketsCategoryExists) {
                 allCategories.splice(1, 0, {
-                    id: TICKETS_CATEGORY_ID,
-                    name: 'Tickets',
-                    order: 0,
-                    createdAt: new Timestamp(0, 0),
+                    id: TICKETS_CATEGORY_ID, name: 'Tickets', order: 0, createdAt: new Timestamp(0, 0),
                 });
             }
+             if ((userProfile?.isAdmin || userHasClosedTickets) && !archivedCategoryExists) {
+                allCategories.push({
+                    id: TICKETS_ARCHIVED_CATEGORY_ID, name: 'Tickets Finalizados', order: 99, createdAt: new Timestamp(0,0),
+                });
+             }
+             
+             // Sort all categories again after potential additions
+             allCategories.sort((a,b) => a.order - b.order);
+
 
             setCategories(allCategories);
 
+            // --- Channels Logic ---
             const visibleChannels = fetchedChannels.filter(channel => {
                 if (!channel.isPrivate) return true;
                 if (userProfile?.isAdmin) return true;
@@ -199,6 +216,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             const allVisibleChannels = [supportChannel, ...visibleChannels];
             setChannels(allVisibleChannels);
 
+            // Set active channel logic
             if (allVisibleChannels.length > 0 && !activeChannel) {
                 setActiveChannel(supportChannel);
             }
@@ -263,7 +281,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             await handleCreateTicket();
         } else if (actionId === 'close-ticket') {
             if (activeChannel) {
-                setItemToDelete({ type: 'channel', item: activeChannel });
+                setItemToManage({ type: 'channel', action: 'close', item: activeChannel });
             }
         }
     };
@@ -276,27 +294,25 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         setIsCreatingTicket(true);
         try {
             // Check if user already has an open ticket to prevent spam
-            const ticketsQuery = query(collection(db, 'chatChannels'), where('isPrivate', '==', true), where('allowedUsers', 'array-contains', userProfile.uid));
+            const ticketsQuery = query(collection(db, 'chatChannels'), where('isPrivate', '==', true), where('allowedUsers', 'array-contains', userProfile.uid), where('isClosed', '!=', true));
             const existingTickets = await getDocs(ticketsQuery);
             if (!existingTickets.empty) {
-                toast({ title: "Ticket Existente", description: "Você já possui um ticket aberto. Nossa equipe entrará em contato em breve.", variant: "default", className: "bg-yellow-500 border-yellow-500 text-black" });
-                // Navigate to existing ticket
+                toast({ title: "Ticket Existente", description: "Você já possui um ticket aberto.", variant: "default", className: "bg-yellow-500 border-yellow-500 text-black" });
                 const existingTicketChannel = { id: existingTickets.docs[0].id, ...existingTickets.docs[0].data() } as ChatChannel;
                 setActiveChannel(existingTicketChannel);
                 return;
             }
 
-            // Create new private channel (ticket)
             const ticketName = `ticket-${userProfile.displayName.toLowerCase().replace(/\s/g, '-')}`;
             const newChannelRef = await addDoc(collection(db, 'chatChannels'), {
                 name: ticketName,
                 categoryId: TICKETS_CATEGORY_ID,
                 isPrivate: true,
-                allowedUsers: [userProfile.uid], // Initially only the user can see it (admins logic is separate)
+                isClosed: false,
+                allowedUsers: [userProfile.uid],
                 createdAt: serverTimestamp(),
             });
 
-             // Add a welcome message to the new ticket channel
             await addDoc(collection(newChannelRef, 'messages'), {
                  text: `Olá ${userProfile.displayName}! Descreva seu problema em detalhes e um administrador irá respondê-lo em breve. Quando o problema for resolvido, você ou um administrador podem fechar este ticket.`,
                  user: { uid: 'bot', name: 'STUDIO PECC', avatar: 'https://i.imgur.com/sXliRZl.png' },
@@ -307,10 +323,10 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
 
             toast({ title: "Ticket Criado!", description: `O canal #${ticketName} foi criado.`, className: "bg-green-600 text-white" });
             
-            // Refetch channels to include the new one and navigate to it
-            const newChannel = { id: newChannelRef.id, name: ticketName, categoryId: TICKETS_CATEGORY_ID, isPrivate: true, allowedUsers: [userProfile.uid], createdAt: new Timestamp(Date.now() / 1000, 0) };
-            setChannels(prev => [...prev, newChannel].sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0)));
-            setActiveChannel(newChannel);
+            await fetchSidebarData(); // Refetch all data to update UI correctly
+            const newChannelDoc = await getDoc(newChannelRef);
+            const newChannelData = { id: newChannelDoc.id, ...newChannelDoc.data() } as ChatChannel;
+            setActiveChannel(newChannelData);
 
         } catch (error) {
             console.error("Error creating ticket:", error);
@@ -323,6 +339,10 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newMessage.trim() === '' || !userProfile || !db || !activeChannel || activeChannel.id === SUPPORT_CHANNEL_ID) return;
+     if (activeChannel.isClosed) {
+        toast({ title: "Ticket Fechado", description: "Não é possível enviar mensagens em um ticket finalizado.", variant: "destructive"});
+        return;
+     }
 
     const messagesCol = collection(db, 'chatChannels', activeChannel.id, 'messages');
 
@@ -440,9 +460,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                 toast({ title: "Canal Criado!" });
             }
             // Refresh local state (simple refetch for now)
-             const channelsSnapshot = await getDocs(query(collection(db, 'chatChannels'), orderBy('createdAt', 'asc')));
-             const fetchedChannels = channelsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatChannel[];
-             setChannels([supportChannel, ...fetchedChannels]);
+             await fetchSidebarData();
 
             setIsChannelModalOpen(false);
             setEditingChannel(null);
@@ -473,11 +491,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                 toast({ title: "Categoria Criada!" });
             }
 
-
-            // Refetch categories to update the list
-            const categoriesSnapshot = await getDocs(query(collection(db, 'chatCategories'), orderBy('order', 'asc')));
-            const fetchedCategories = categoriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatCategory[];
-            setCategories([supportCategory, ...fetchedCategories]);
+            await fetchSidebarData();
 
             setIsCategoryModalOpen(false);
             setNewCategoryName('');
@@ -489,27 +503,42 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         }
     };
     
-    const handleDeleteConfirmation = async () => {
-        if (!itemToDelete || !db) return;
+    const handleConfirmManagementAction = async () => {
+        if (!itemToManage || !db) return;
 
-        const { type, item } = itemToDelete;
+        const { type, action, item } = itemToManage;
         
         try {
             if (type === 'channel') {
                 const channel = item as ChatChannel;
-                // TODO: Also delete all messages within the channel in a batch
-                await deleteDoc(doc(db, 'chatChannels', channel.id));
-                setChannels(prev => prev.filter(c => c.id !== channel.id));
-                // If the deleted channel was active, switch to support channel
-                if (activeChannel?.id === channel.id) {
+                if (action === 'delete') {
+                    // TODO: Also delete all messages within the channel in a batch
+                    await deleteDoc(doc(db, 'chatChannels', channel.id));
+                    setChannels(prev => prev.filter(c => c.id !== channel.id));
+                    if (activeChannel?.id === channel.id) { setActiveChannel(supportChannel); }
+                    toast({ title: "Canal Excluído", description: `O canal #${channel.name} foi removido.` });
+                } else if (action === 'close') {
+                    const channelRef = doc(db, 'chatChannels', channel.id);
+                    await updateDoc(channelRef, {
+                        isClosed: true,
+                        name: `✅-finalizado-${channel.name}`,
+                        categoryId: TICKETS_ARCHIVED_CATEGORY_ID,
+                    });
+                     await addDoc(collection(channelRef, 'messages'), {
+                        text: `Este ticket foi encerrado e arquivado.`,
+                        user: { uid: 'bot', name: 'STUDIO PECC', avatar: 'https://i.imgur.com/sXliRZl.png' },
+                        createdAt: serverTimestamp(),
+                        isBotMessage: true,
+                     });
+                    toast({ title: "Ticket Encerrado", description: `O ticket foi finalizado e arquivado.` });
+                    await fetchSidebarData();
                     setActiveChannel(supportChannel);
                 }
-                toast({ title: "Canal Excluído", description: `O canal #${channel.name} foi removido.` });
+
             } else if (type === 'category') {
                 const category = item as ChatCategory;
                 const batch = writeBatch(db);
 
-                // Find and delete channels in this category
                 const channelsToDelete = channels.filter(c => c.categoryId === category.id);
                 channelsToDelete.forEach(c => {
                     // TODO: Also delete all messages within each channel
@@ -519,20 +548,16 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                     }
                 });
 
-                // Delete the category itself
                 batch.delete(doc(db, 'chatCategories', category.id));
-
                 await batch.commit();
-
-                setCategories(prev => prev.filter(c => c.id !== category.id));
-                setChannels(prev => prev.filter(c => c.categoryId !== category.id));
-                toast({ title: "Categoria Excluída", description: `A categoria ${category.name} e todos os seus canais foram removidos.` });
+                await fetchSidebarData();
+                toast({ title: "Categoria Excluída", description: `A categoria ${category.name} e seus canais foram removidos.` });
             }
         } catch (error) {
-             console.error(`Error deleting ${type}:`, error);
-            toast({ title: "Erro", description: `Não foi possível excluir.`, variant: "destructive" });
+             console.error(`Error during '${action}' on ${type}:`, error);
+            toast({ title: "Erro", description: `Não foi possível concluir a ação.`, variant: "destructive" });
         } finally {
-            setItemToDelete(null);
+            setItemToManage(null);
         }
     };
 
@@ -570,7 +595,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                 {categories.map(category => (
                     <AccordionItem value={category.id} key={category.id} className="border-b-0 group">
                         <ContextMenu>
-                            <ContextMenuTrigger disabled={!userProfile?.isAdmin || category.id === SUPPORT_CATEGORY_ID || category.id === TICKETS_CATEGORY_ID}>
+                            <ContextMenuTrigger disabled={!userProfile?.isAdmin || [SUPPORT_CATEGORY_ID, TICKETS_CATEGORY_ID, TICKETS_ARCHIVED_CATEGORY_ID].includes(category.id)}>
                                 <div className="flex items-center justify-between group">
                                         <AccordionTrigger className="flex-1 text-xs font-semibold uppercase text-muted-foreground hover:text-foreground py-1 px-2 rounded-md">
                                             {category.name}
@@ -579,7 +604,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                             </ContextMenuTrigger>
                             <ContextMenuContent>
                                 <ContextMenuItem onSelect={() => handleOpenCategoryModal(category)}>Editar Categoria</ContextMenuItem>
-                                <ContextMenuItem onSelect={() => setItemToDelete({ type: 'category', item: category })} className="text-destructive">Excluir Categoria</ContextMenuItem>
+                                <ContextMenuItem onSelect={() => setItemToManage({ type: 'category', action: 'delete', item: category })} className="text-destructive">Excluir Categoria</ContextMenuItem>
                             </ContextMenuContent>
                         </ContextMenu>
                         <AccordionContent className="pl-2 pb-1">
@@ -596,12 +621,16 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                                                 )}
                                             >
                                                 {channel.isPrivate ? <Lock className="mr-2 h-4 w-4" /> : <Hash className="mr-2 h-4 w-4" />}
-                                                {channel.name}
+                                                <span className="truncate">{channel.name}</span>
                                             </Button>
                                         </ContextMenuTrigger>
                                         <ContextMenuContent>
                                             <ContextMenuItem onSelect={() => handleOpenChannelModal(channel.categoryId, channel)}>Editar Canal</ContextMenuItem>
-                                            <ContextMenuItem onSelect={() => setItemToDelete({ type: 'channel', item: channel })} className="text-destructive">Excluir Canal</ContextMenuItem>
+                                             {channel.isPrivate ? (
+                                                <ContextMenuItem onSelect={() => setItemToManage({ type: 'channel', action: 'close', item: channel })} className="text-destructive">Encerrar Ticket</ContextMenuItem>
+                                             ) : (
+                                                <ContextMenuItem onSelect={() => setItemToManage({ type: 'channel', action: 'delete', item: channel })} className="text-destructive">Excluir Canal</ContextMenuItem>
+                                             )}
                                         </ContextMenuContent>
                                     </ContextMenu>
                                 ))}
@@ -619,7 +648,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         {/* Chat Header */}
         <header className="flex items-center h-14 border-b border-border px-4 flex-shrink-0">
           {activeChannel?.isPrivate ? <Lock className="h-5 w-5 text-muted-foreground" /> : <Hash className="h-5 w-5 text-muted-foreground" />}
-          <h1 className="text-lg font-semibold text-foreground ml-1">
+          <h1 className="text-lg font-semibold text-foreground ml-1 truncate">
             {activeChannel?.name || 'Selecione um canal'}
           </h1>
         </header>
@@ -733,7 +762,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                                 <p className="text-xs text-muted-foreground">{formatDate(msg.createdAt)}</p>
                             </div>
                             <p className="text-sm text-foreground/90 whitespace-pre-wrap">{msg.text}</p>
-                             {msg.actions && msg.actions.length > 0 && (
+                             {msg.actions && msg.actions.length > 0 && !activeChannel?.isClosed && (
                                  <div className="mt-2 flex gap-2">
                                      {msg.actions.map(action => (
                                          <Button key={action.actionId} size="sm" onClick={() => handleBotActionClick(action.actionId)} disabled={isCreatingTicket}>
@@ -799,9 +828,9 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                   placeholder={activeChannel ? `Conversar em #${activeChannel.name}` : 'Selecione um canal para conversar'}
                   className={cn("flex-1 bg-input", replyingTo && "rounded-t-none")}
                   autoComplete="off"
-                  disabled={!userProfile || !activeChannel || activeChannel.id === SUPPORT_CHANNEL_ID}
+                  disabled={!userProfile || !activeChannel || activeChannel.id === SUPPORT_CHANNEL_ID || activeChannel.isClosed}
                 />
-                <Button type="submit" size="icon" className="flex-shrink-0" disabled={!userProfile || !activeChannel || newMessage.trim() === '' || activeChannel.id === SUPPORT_CHANNEL_ID}>
+                <Button type="submit" size="icon" className="flex-shrink-0" disabled={!userProfile || !activeChannel || newMessage.trim() === '' || activeChannel.id === SUPPORT_CHANNEL_ID || activeChannel.isClosed}>
                   <Send className="h-4 w-4" />
                 </Button>
             </form>
@@ -887,23 +916,24 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             </DialogContent>
         </Dialog>
         
-        {/* Delete Confirmation Dialog */}
-        <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
+        {/* Delete/Close Confirmation Dialog */}
+        <AlertDialog open={!!itemToManage} onOpenChange={(open) => !open && setItemToManage(null)}>
             <AlertDialogContent>
                 <AlertDialogHeader>
-                    <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                    <AlertDialogTitle>Confirmar Ação</AlertDialogTitle>
                     <AlertDialogDescription>
-                        {itemToDelete?.type === 'channel' && `Tem certeza que quer excluir o canal #${(itemToDelete.item as ChatChannel).name}? Esta ação não pode ser desfeita.`}
-                        {itemToDelete?.type === 'category' && `Tem certeza que quer excluir a categoria ${(itemToDelete.item as ChatCategory).name}? TODOS os canais dentro dela serão excluídos permanentemente.`}
+                        {itemToManage?.action === 'delete' && `Tem certeza que quer excluir? Esta ação não pode ser desfeita.`}
+                        {itemToManage?.action === 'close' && `Tem certeza que quer encerrar este ticket? Ele será arquivado e não poderá mais receber mensagens.`}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                    <AlertDialogCancel onClick={() => setItemToDelete(null)}>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDeleteConfirmation} className="bg-destructive hover:bg-destructive/90">Excluir</AlertDialogAction>
+                    <AlertDialogCancel onClick={() => setItemToManage(null)}>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleConfirmManagementAction} className="bg-destructive hover:bg-destructive/90">
+                         {itemToManage?.action === 'delete' ? 'Excluir' : 'Encerrar Ticket'}
+                    </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
     </div>
   );
 }
-
