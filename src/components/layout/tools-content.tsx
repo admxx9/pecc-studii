@@ -298,7 +298,16 @@ export default function ToolsContent({ selectedCategory }: ToolsContentProps) {
                                                     </div>
                                                  )}
                                                 <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto self-end sm:ml-auto">
-                                                    
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="hover:bg-accent hover:text-accent-foreground transition-colors w-full sm:w-auto"
+                                                        onClick={() => handleInfoClick(tool.id)}
+                                                        disabled={isCurrentlyNavigating}
+                                                    >
+                                                        {isCurrentlyNavigating && isNavigating === tool.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Info className="mr-2 h-4 w-4" />}
+                                                        Informações
+                                                    </Button>
                                                      {tool.category === 'loja' ? (
                                                         <Button
                                                             variant="default"
@@ -307,7 +316,7 @@ export default function ToolsContent({ selectedCategory }: ToolsContentProps) {
                                                             onClick={() => handleInfoClick(tool.id)}
                                                             disabled={isCurrentlyNavigating}
                                                         >
-                                                            {isCurrentlyNavigating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShoppingCart className="mr-2 h-4 w-4" />}
+                                                            {isCurrentlyNavigating && isNavigating === tool.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShoppingCart className="mr-2 h-4 w-4" />}
                                                             Comprar
                                                         </Button>
                                                      ) : isLocked ? (
@@ -323,11 +332,11 @@ export default function ToolsContent({ selectedCategory }: ToolsContentProps) {
                                                         </Button>
                                                     ) : (
                                                         <Button
-                                                            variant="outline"
+                                                            variant="default"
                                                             size="sm"
                                                             onClick={() => handleDownloadClick(tool)}
-                                                            className="hover:bg-primary hover:text-primary-foreground transition-colors w-full sm:w-auto"
-                                                            disabled={isCurrentlyDownloading || isCurrentlyDownloading}
+                                                            className="bg-primary hover:bg-primary/90 transition-colors w-full sm:w-auto"
+                                                            disabled={isCurrentlyDownloading || isCurrentlyNavigating}
                                                         >
                                                             {isCurrentlyDownloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
                                                             Download
