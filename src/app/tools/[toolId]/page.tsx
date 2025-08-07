@@ -39,15 +39,16 @@ const canUserAccessTool = (
     return false; // Default case (shouldn't happen with defined types)
  };
 
+ // Discord link to get a purchase code
+const DISCORD_PURCHASE_INFO_LINK = "https://discord.gg/YP9UraDH4k";
+
 export default function ToolDetailPage() {
     const [tool, setTool] = useState<Tool | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
     const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
-    const [purchaseView, setPurchaseView] = useState<'buy' | 'redeem' | 'pix'>('buy');
-    const [pixData, setPixData] = useState<{ qr_code_text: string, qr_code_url: string } | null>(null);
-    const [isGeneratingPix, setIsGeneratingPix] = useState(false);
+    const [purchaseView, setPurchaseView] = useState<'buy' | 'redeem'>('buy');
     const [redemptionCode, setRedemptionCode] = useState('');
     const [isRedeeming, setIsRedeeming] = useState(false);
 
@@ -129,46 +130,8 @@ export default function ToolDetailPage() {
       }
     };
 
-    const handleGeneratePix = async () => {
-        if (!tool || !currentUser || !userProfile) {
-            toast({ title: "Erro", description: "Você precisa estar logado para gerar um pagamento.", variant: "destructive" });
-            return;
-        }
-        setIsGeneratingPix(true);
-        try {
-            const response = await fetch('/api/checkout/pagbank', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    planId: tool.id,
-                    planName: tool.name,
-                    amount: tool.price,
-                    userId: currentUser.uid,
-                    userName: userProfile.displayName,
-                    userEmail: userProfile.email,
-                }),
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Falha ao gerar o QR Code PIX.');
-            }
-
-            const data = await response.json();
-            setPixData(data);
-            setPurchaseView('pix');
-
-        } catch (error: any) {
-            toast({ title: "Erro no Pagamento", description: error.message, variant: "destructive" });
-        } finally {
-            setIsGeneratingPix(false);
-        }
-    };
-    
-    const handleCopyPixCode = () => {
-        if (!pixData) return;
-        navigator.clipboard.writeText(pixData.qr_code_text);
-        toast({ title: "Sucesso", description: "Código PIX Copia e Cola copiado!" });
+    const handleGoToPurchaseInfo = () => {
+        window.open(DISCORD_PURCHASE_INFO_LINK, '_blank', 'noopener,noreferrer');
     };
 
     const handleRedeemCode = async () => {
@@ -213,33 +176,6 @@ export default function ToolDetailPage() {
     const isLocked = !canUserAccessTool(tool.requiredPlan, userProfile?.premiumPlanType);
 
     const renderPurchaseModalContent = () => {
-        if (purchaseView === 'pix') {
-            return (
-                <>
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2"><QrCode /> Pague com PIX</DialogTitle>
-                        <DialogDescription>Escaneie o QR Code com seu app de banco ou use o código Copia e Cola.</DialogDescription>
-                    </DialogHeader>
-                    {pixData?.qr_code_url ? (
-                        <div className="flex flex-col items-center gap-4 py-4">
-                            <Image src={pixData.qr_code_url} alt="PIX QR Code" width={250} height={250} className="rounded-md border p-2" />
-                            <Button onClick={handleCopyPixCode} variant="outline" className="w-full">
-                                <Copy className="mr-2 h-4 w-4" />
-                                Copiar Código PIX
-                            </Button>
-                             <p className="text-xs text-muted-foreground text-center">Após o pagamento, você receberá o código de resgate no seu email ou poderá retirá-lo no Discord.</p>
-                        </div>
-                    ) : (
-                         <div className="flex justify-center items-center h-48">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                         </div>
-                    )}
-                     <DialogClose asChild>
-                         <Button variant="secondary" onClick={() => setPurchaseView('buy')}>Voltar</Button>
-                    </DialogClose>
-                </>
-            );
-        }
         if (purchaseView === 'redeem') {
              return (
                  <>
@@ -276,10 +212,10 @@ export default function ToolDetailPage() {
                     <DialogDescription>Escolha como deseja obter este item.</DialogDescription>
                 </DialogHeader>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
-                     <Button variant="default" size="lg" className="h-auto py-4 flex flex-col gap-2" onClick={handleGeneratePix} disabled={isGeneratingPix}>
-                         {isGeneratingPix ? <Loader2 className="h-6 w-6 animate-spin" /> : <QrCode className="h-6 w-6" />}
-                        <span className="font-semibold">Obter via PIX</span>
-                        <span className="text-xs font-normal text-primary-foreground/80">Pague com QR Code ou Copia e Cola.</span>
+                     <Button variant="default" size="lg" className="h-auto py-4 flex flex-col gap-2" onClick={handleGoToPurchaseInfo}>
+                        <Gift className="h-6 w-6" />
+                        <span className="font-semibold">Obter Código no Discord</span>
+                        <span className="text-xs font-normal text-primary-foreground/80">Adquira seu código em nosso servidor.</span>
                     </Button>
                     <Button variant="secondary" size="lg" className="h-auto py-4 flex flex-col gap-2" onClick={() => setPurchaseView('redeem')}>
                         <Ticket className="h-6 w-6"/>
@@ -360,7 +296,7 @@ export default function ToolDetailPage() {
 
                         <div className="mt-6 border-t pt-6 flex justify-end">
                              {tool.category === 'loja' ? (
-                                <Dialog open={isPurchaseModalOpen} onOpenChange={(open) => { setIsPurchaseModalOpen(open); if (!open) { setPurchaseView('buy'); setPixData(null); } }}>
+                                <Dialog open={isPurchaseModalOpen} onOpenChange={(open) => { setIsPurchaseModalOpen(open); if (!open) { setPurchaseView('buy'); } }}>
                                      <DialogTrigger asChild>
                                          <Button variant="default" size="lg" className="bg-primary hover:bg-primary/90">
                                             <ShoppingCart className="mr-2 h-5 w-5" />
@@ -391,4 +327,3 @@ export default function ToolDetailPage() {
         </div>
     );
 }
-
