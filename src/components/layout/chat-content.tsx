@@ -45,7 +45,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { UserProfile } from '@/components/page/home-client-page';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, Timestamp, doc, deleteDoc, updateDoc, arrayUnion, arrayRemove, getDoc, writeBatch, where, getDocs, setDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, Timestamp, doc, deleteDoc, updateDoc, arrayUnion, arrayRemove, getDoc, writeBatch, where, getDocs, setDoc, Unsubscribe } from 'firebase/firestore';
 import { useToast } from "@/hooks/use-toast";
 import { ranks, rankKeys, rankIcons } from '@/config/ranks';
 
@@ -199,27 +199,25 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         fetchUsers();
     }, []);
 
-    const fetchSidebarData = useCallback(async () => {
+    // Set up real-time listeners for categories and channels
+    useEffect(() => {
         if (!db) return;
         setIsLoading(true);
 
-        try {
-            const categoriesQuery = query(collection(db, 'chatCategories'), orderBy('order', 'asc'));
-            const channelsQuery = query(collection(db, 'chatChannels'), orderBy('createdAt', 'asc'));
+        const categoriesQuery = query(collection(db, 'chatCategories'), orderBy('order', 'asc'));
+        const channelsQuery = query(collection(db, 'chatChannels'), orderBy('createdAt', 'asc'));
+        
+        let combinedChannels: ChatChannel[] = [];
+        let combinedCategories: ChatCategory[] = [];
 
-            const [categoriesSnapshot, channelsSnapshot] = await Promise.all([
-                getDocs(categoriesQuery),
-                getDocs(channelsQuery)
-            ]);
+        const processData = () => {
+            if (!combinedCategories.length || !combinedChannels.length) return;
 
-            const fetchedCategories = categoriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatCategory[];
-            const fetchedChannels = channelsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatChannel[];
+             // --- Categories Logic ---
+            let allCategories = [supportCategory, ...combinedCategories];
 
-            // --- Categories Logic ---
-            let allCategories = [supportCategory, ...fetchedCategories];
-
-            const userHasOpenTickets = fetchedChannels.some(c => c.categoryId === TICKETS_CATEGORY_ID && (userProfile?.isAdmin || c.allowedUsers?.includes(userProfile?.uid || '')));
-            const userHasClosedTickets = fetchedChannels.some(c => c.categoryId === TICKETS_ARCHIVED_CATEGORY_ID && (userProfile?.isAdmin || c.allowedUsers?.includes(userProfile?.uid || '')));
+            const userHasOpenTickets = combinedChannels.some(c => c.categoryId === TICKETS_CATEGORY_ID && (userProfile?.isAdmin || c.allowedUsers?.includes(userProfile?.uid || '')));
+            const userHasClosedTickets = combinedChannels.some(c => c.categoryId === TICKETS_ARCHIVED_CATEGORY_ID && (userProfile?.isAdmin || c.allowedUsers?.includes(userProfile?.uid || '')));
 
             const ticketsCategoryExists = allCategories.some(c => c.id === TICKETS_CATEGORY_ID);
             const archivedCategoryExists = allCategories.some(c => c.id === TICKETS_ARCHIVED_CATEGORY_ID);
@@ -236,51 +234,62 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                 });
              }
              
-             // Sort all categories again after potential additions
              allCategories.sort((a,b) => a.order - b.order);
 
-
-             // Filter categories based on user rank
             const visibleCategories = allCategories.filter(cat => {
-                 if (userProfile?.isAdmin) return true; // Admins see all
-                 if (cat.id === TICKETS_CATEGORY_ID && userHasOpenTickets) return true; // Show Tickets category if user has open tickets
-                 if (cat.id === TICKETS_ARCHIVED_CATEGORY_ID && userHasClosedTickets) return true; // Show Archived category if user has closed tickets
-                 if (!cat.allowedRanks || cat.allowedRanks.length === 0) return true; // Public categories
+                 if (userProfile?.isAdmin) return true;
+                 if (cat.id === TICKETS_CATEGORY_ID && userHasOpenTickets) return true;
+                 if (cat.id === TICKETS_ARCHIVED_CATEGORY_ID && userHasClosedTickets) return true;
+                 if (!cat.allowedRanks || cat.allowedRanks.length === 0) return true;
                  return cat.allowedRanks.includes(userProfile?.rank || '');
              });
-
 
             setCategories(visibleCategories);
 
             // --- Channels Logic ---
             const visibleCategoryIds = visibleCategories.map(c => c.id);
-            const visibleChannels = fetchedChannels.filter(channel => {
-                if (!visibleCategoryIds.includes(channel.categoryId)) return false; // Hide channels of hidden categories
-                if (!channel.isPrivate) return true; // Public channels in visible categories
-                if (userProfile?.isAdmin) return true; // Admins see all private channels
+            const visibleChannels = combinedChannels.filter(channel => {
+                if (!visibleCategoryIds.includes(channel.categoryId)) return false;
+                if (!channel.isPrivate) return true;
+                if (userProfile?.isAdmin) return true;
                 return channel.allowedUsers?.includes(userProfile?.uid || '');
             });
 
             const allVisibleChannels = [supportChannel, ...visibleChannels];
             setChannels(allVisibleChannels);
-
+            
             // Set active channel logic
             if (allVisibleChannels.length > 0 && (!activeChannel || !allVisibleChannels.some(c => c.id === activeChannel.id))) {
                 setActiveChannel(supportChannel);
             }
-
-        } catch (error) {
-            console.error("Error fetching sidebar data:", error);
-            toast({ title: "Erro", description: "Não foi possível carregar os canais.", variant: "destructive" });
-        } finally {
             setIsLoading(false);
-        }
-    }, [userProfile?.uid, userProfile?.isAdmin, userProfile?.rank, toast, activeChannel]);
+        };
 
 
-    useEffect(() => {
-        fetchSidebarData();
-    }, [fetchSidebarData]);
+        const unsubCategories = onSnapshot(categoriesQuery, (snapshot) => {
+            combinedCategories = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatCategory[];
+            processData();
+        }, (error) => {
+            console.error("Error fetching categories:", error);
+            toast({ title: "Erro", description: "Não foi possível carregar as categorias.", variant: "destructive" });
+            setIsLoading(false);
+        });
+
+        const unsubChannels = onSnapshot(channelsQuery, (snapshot) => {
+            combinedChannels = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatChannel[];
+            processData();
+        }, (error) => {
+            console.error("Error fetching channels:", error);
+            toast({ title: "Erro", description: "Não foi possível carregar os canais.", variant: "destructive" });
+             setIsLoading(false);
+        });
+        
+        return () => {
+            unsubCategories();
+            unsubChannels();
+        };
+
+    }, [userProfile?.uid, userProfile?.isAdmin, userProfile?.rank, toast]);
 
 
   // Firestore listener for messages
@@ -375,28 +384,15 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
 
             toast({ title: "Ticket Criado!", description: `O canal #${ticketName} foi criado.`, className: "bg-green-600 text-white" });
             
-            // Manually add the new channel to the local state to trigger UI update
+            // The real-time listener will automatically add the channel to the UI for everyone.
+            // We just need to set it as active for the current user.
             const newChannelForState: ChatChannel = {
                 id: newChannelRef.id,
                 ...newChannelData,
                 createdAt: new Timestamp(Date.now() / 1000, 0) // Use a client-side timestamp for immediate state update
             };
-
-            setChannels(prev => [...prev, newChannelForState]);
-            
-            // Also add the tickets category if it doesn't exist yet for this user
-            if (!categories.some(c => c.id === TICKETS_CATEGORY_ID)) {
-                setCategories(prev => {
-                    const newCategories = [...prev];
-                     newCategories.splice(1, 0, {
-                        id: TICKETS_CATEGORY_ID, name: 'Tickets', order: 0, createdAt: new Timestamp(0, 0), allowedRanks: []
-                    });
-                    return newCategories;
-                });
-            }
-
-            // Set the new channel as active
             setActiveChannel(newChannelForState);
+
 
         } catch (error) {
             console.error("Error creating ticket:", error);
@@ -532,8 +528,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                 });
                 toast({ title: "Canal Criado!" });
             }
-            // Refresh local state (simple refetch for now)
-             await fetchSidebarData();
+            // The real-time listener will handle the UI update
 
             setIsChannelModalOpen(false);
             setEditingChannel(null);
@@ -569,7 +564,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                 toast({ title: "Categoria Criada!" });
             }
 
-            await fetchSidebarData();
+            // The real-time listener will handle the UI update
 
             setIsCategoryModalOpen(false);
             setNewCategoryName('');
@@ -593,7 +588,6 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                 if (action === 'delete') {
                     // TODO: Also delete all messages within the channel in a batch
                     await deleteDoc(doc(db, 'chatChannels', channel.id));
-                    setChannels(prev => prev.filter(c => c.id !== channel.id));
                     if (activeChannel?.id === channel.id) { setActiveChannel(supportChannel); }
                     toast({ title: "Canal Excluído", description: `O canal #${channel.name} foi removido.` });
                 } else if (action === 'close') {
@@ -610,7 +604,6 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                         isBotMessage: true,
                      });
                     toast({ title: "Ticket Encerrado", description: `O ticket foi finalizado e arquivado.` });
-                    await fetchSidebarData();
                     setActiveChannel(supportChannel);
                 }
 
@@ -629,7 +622,6 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
 
                 batch.delete(doc(db, 'chatCategories', category.id));
                 await batch.commit();
-                await fetchSidebarData();
                 toast({ title: "Categoria Excluída", description: `A categoria ${category.name} e seus canais foram removidos.` });
             }
         } catch (error) {
