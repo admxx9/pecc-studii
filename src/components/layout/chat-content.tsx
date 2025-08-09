@@ -227,12 +227,12 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
 
             if ((userProfile?.isAdmin || userHasOpenTickets) && !ticketsCategoryExists) {
                 allCategories.splice(1, 0, {
-                    id: TICKETS_CATEGORY_ID, name: 'Tickets', order: 0, createdAt: new Timestamp(0, 0), allowedRanks: ['admin']
+                    id: TICKETS_CATEGORY_ID, name: 'Tickets', order: 0, createdAt: new Timestamp(0, 0), allowedRanks: [] // No rank restriction!
                 });
             }
              if ((userProfile?.isAdmin || userHasClosedTickets) && !archivedCategoryExists) {
                 allCategories.push({
-                    id: TICKETS_ARCHIVED_CATEGORY_ID, name: 'Tickets Finalizados', order: 99, createdAt: new Timestamp(0,0), allowedRanks: ['admin']
+                    id: TICKETS_ARCHIVED_CATEGORY_ID, name: 'Tickets Finalizados', order: 99, createdAt: new Timestamp(0,0), allowedRanks: [] // No rank restriction!
                 });
              }
              
@@ -243,6 +243,8 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
              // Filter categories based on user rank
             const visibleCategories = allCategories.filter(cat => {
                  if (userProfile?.isAdmin) return true; // Admins see all
+                 if (cat.id === TICKETS_CATEGORY_ID && userHasOpenTickets) return true; // Show Tickets category if user has open tickets
+                 if (cat.id === TICKETS_ARCHIVED_CATEGORY_ID && userHasClosedTickets) return true; // Show Archived category if user has closed tickets
                  if (!cat.allowedRanks || cat.allowedRanks.length === 0) return true; // Public categories
                  return cat.allowedRanks.includes(userProfile?.rank || '');
              });
