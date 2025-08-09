@@ -270,56 +270,46 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
     const { visibleCategories, visibleChannels } = useMemo(() => {
         if (!userProfile) return { visibleCategories: [], visibleChannels: [] };
         
-        const hasChannelInCategory = (categoryId: string) => 
-            channels.some(c => 
-                c.categoryId === categoryId && 
-                (userProfile.isAdmin || c.allowedUsers?.includes(userProfile.uid))
-            );
-
-        let dynamicCategories = [];
-        const hasOpenTicket = hasChannelInCategory(TICKETS_CATEGORY_ID);
-
-        // Logic for dynamic categories
-        if (hasChannelInCategory(SALES_CONSULTATION_CATEGORY_ID) || userProfile.isAdmin) {
-             dynamicCategories.push({ id: SALES_CONSULTATION_CATEGORY_ID, name: 'Consultas de Venda', order: -8, createdAt: new Timestamp(0,0), allowedRanks: [] });
-        }
-        if (hasOpenTicket || userProfile.isAdmin) {
-            dynamicCategories.push({ id: TICKETS_CATEGORY_ID, name: 'Tickets', order: -7, createdAt: new Timestamp(0, 0), allowedRanks: [] });
-        }
-        if (hasChannelInCategory(TICKETS_ARCHIVED_CATEGORY_ID) || userProfile.isAdmin) {
-            dynamicCategories.push({ id: TICKETS_ARCHIVED_CATEGORY_ID, name: 'Tickets Finalizados', order: 99, createdAt: new Timestamp(0,0), allowedRanks: [] });
-        }
-        
-        const staticCategories = [serverInfoCategory];
-        // Only show the main "Suporte" category if the user has no open tickets and is not an admin viewing all tickets
-        if (!hasOpenTicket || userProfile.isAdmin) {
-             staticCategories.push(supportCategory);
-        }
-
-        const allDbCategories = [...staticCategories, ...categories, ...dynamicCategories];
-
-        const finalVisibleCategories = allDbCategories.filter(cat => {
-            if (userProfile.isAdmin) return true;
-            // Hide support category if there is an open ticket for non-admins
-            if (cat.id === SUPPORT_CATEGORY_ID && hasOpenTicket) return false;
-            // Public categories
-            if (!cat.allowedRanks || cat.allowedRanks.length === 0) return true;
-            // Rank-restricted categories
-            return cat.allowedRanks.includes(userProfile.rank || '');
-        }).sort((a,b) => a.order - b.order);
-
-        const visibleCategoryIds = new Set(finalVisibleCategories.map(c => c.id));
-        
         const allPossibleChannels = [serverInfoChannel, supportChannel, ...channels];
 
+        // 1. First, determine all channels visible to the current user
         const finalVisibleChannels = allPossibleChannels.filter(channel => {
-            if (!visibleCategoryIds.has(channel.categoryId)) return false;
-            if (channel.isPrivate) {
-                return userProfile.isAdmin || channel.allowedUsers?.includes(userProfile.uid);
+            if (userProfile.isAdmin) return true;
+            if (channel.isPrivate) return channel.allowedUsers?.includes(userProfile.uid);
+            
+            // For non-private channels, check category permissions
+            const parentCategory = categories.find(c => c.id === channel.categoryId);
+            if(parentCategory?.allowedRanks && parentCategory.allowedRanks.length > 0) {
+                 return parentCategory.allowedRanks.includes(userProfile.rank || '');
             }
-            return true;
+            return true; // Public channel in a public category
         });
+
+        // 2. Determine if the user has any open tickets
+        const hasOpenTicket = finalVisibleChannels.some(c => c.categoryId === TICKETS_CATEGORY_ID);
+
+        // 3. Now, determine all categories that should be visible
+        const visibleCategoryIds = new Set(finalVisibleChannels.map(c => c.categoryId));
         
+        // Always add static categories that are always present
+        visibleCategoryIds.add(SERVER_INFO_CATEGORY_ID);
+
+        // Add support category only if the user has NO open tickets.
+        if (!hasOpenTicket) {
+             visibleCategoryIds.add(SUPPORT_CATEGORY_ID);
+        }
+
+        let dynamicCategories = [
+             { id: SALES_CONSULTATION_CATEGORY_ID, name: 'Consultas de Venda', order: -8, createdAt: new Timestamp(0,0), allowedRanks: [] },
+             { id: TICKETS_CATEGORY_ID, name: 'Tickets', order: -7, createdAt: new Timestamp(0, 0), allowedRanks: [] },
+             { id: TICKETS_ARCHIVED_CATEGORY_ID, name: 'Tickets Finalizados', order: 99, createdAt: new Timestamp(0,0), allowedRanks: [] }
+        ];
+
+        const allPossibleCategories = [...categories, serverInfoCategory, supportCategory, ...dynamicCategories];
+
+        const finalVisibleCategories = allPossibleCategories.filter(cat => visibleCategoryIds.has(cat.id))
+                                                           .sort((a,b) => a.order - b.order);
+
         return { visibleCategories: finalVisibleCategories, visibleChannels: finalVisibleChannels };
 
     }, [channels, categories, userProfile]);
@@ -1159,5 +1149,6 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
     </div>
   );
 }
+
 
 
