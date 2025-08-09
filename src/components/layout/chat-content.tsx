@@ -241,43 +241,67 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
     
         const categoriesQuery = query(collection(db, 'chatCategories'), orderBy('order', 'asc'));
     
-        // Construct a query for channels relevant to the user
+        // Correctly query for channels. Instead of one complex 'or' query, we can use multiple listeners and combine the results.
         const channelsCol = collection(db, 'chatChannels');
-        const channelsQuery = userProfile.isAdmin
-          ? query(channelsCol, orderBy('createdAt', 'asc')) // Admin sees all channels
-          : query(channelsCol, 
-              or(
-                  where('isPrivate', '!=', true), // All public channels
-                  where('allowedUsers', 'array-contains', userProfile.uid) // Private channels they are in
-              ),
-              orderBy('createdAt', 'asc')
-            );
+        
+        let unsubscribers: Unsubscribe[] = [];
+
+        // Listener for public channels
+        const publicChannelsQuery = query(channelsCol, where('isPrivate', '!=', true));
+        const unsubPublic = onSnapshot(publicChannelsQuery, (snapshot) => {
+            const publicChannels = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatChannel[];
+            setChannels(prev => {
+                const otherChannels = prev.filter(c => c.isPrivate === true);
+                const combined = [...otherChannels, ...publicChannels];
+                return Array.from(new Map(combined.map(item => [item['id'], item])).values());
+            });
+        }, (error) => console.error("Error fetching public channels:", error));
+        unsubscribers.push(unsubPublic);
+
+        // Listener for private channels user is part of
+        const privateChannelsQuery = query(channelsCol, where('isPrivate', '==', true), where('allowedUsers', 'array-contains', userProfile.uid));
+        const unsubPrivate = onSnapshot(privateChannelsQuery, (snapshot) => {
+            const privateChannels = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatChannel[];
+             setChannels(prev => {
+                const otherChannels = prev.filter(c => !(c.isPrivate && c.allowedUsers?.includes(userProfile.uid)));
+                const combined = [...otherChannels, ...privateChannels];
+                return Array.from(new Map(combined.map(item => [item['id'], item])).values());
+            });
+        }, (error) => console.error("Error fetching private channels:", error));
+        unsubscribers.push(unsubPrivate);
+
+        // If user is admin, they need to see ALL private channels, so a third listener is needed.
+        if (userProfile.isAdmin) {
+             const allPrivateQuery = query(channelsCol, where('isPrivate', '==', true));
+             const unsubAdmin = onSnapshot(allPrivateQuery, (snapshot) => {
+                 const allPrivateChannels = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatChannel[];
+                 setChannels(prev => {
+                    const otherChannels = prev.filter(c => c.isPrivate !== true);
+                    const combined = [...otherChannels, ...allPrivateChannels];
+                    return Array.from(new Map(combined.map(item => [item['id'], item])).values());
+                });
+             }, (error) => console.error("Error fetching admin channels:", error));
+             unsubscribers.push(unsubAdmin);
+        }
     
         const unsubCategories = onSnapshot(categoriesQuery, (snapshot) => {
             const fetchedCategories = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatCategory[];
             setCategories(fetchedCategories);
+            setIsLoading(false); // Consider loading finished when categories are loaded
         }, (error) => {
             console.error("Error fetching categories:", error);
             toast({ title: "Erro", description: "Não foi possível carregar as categorias.", variant: "destructive" });
+             setIsLoading(false);
         });
-    
-        const unsubChannels = onSnapshot(channelsQuery, (snapshot) => {
-            const fetchedChannels = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatChannel[];
-            setChannels(fetchedChannels);
-            setIsLoading(false);
-        }, (error) => {
-            console.error("Error fetching channels:", error);
-            toast({ title: "Erro", description: "Não foi possível carregar os canais.", variant: "destructive" });
-            setIsLoading(false);
-        });
+        unsubscribers.push(unsubCategories);
+
     
         return () => {
-            unsubCategories();
-            unsubChannels();
+           unsubscribers.forEach(unsub => unsub());
         };
     }, [toast, userProfile]);
     
-    // Derived state for visible categories and channels
+     // Derived state for visible categories and channels
     const { visibleCategories, visibleChannels } = useMemo(() => {
         if (!userProfile) return { visibleCategories: [], visibleChannels: [] };
         
@@ -300,25 +324,32 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
             return true;
         });
 
-        // 2. Determine which dynamic categories should be shown based on visible channels.
-        const userHasOpenTicket = rankFilteredChannels.some(c => c.categoryId === TICKETS_CATEGORY_ID);
-        const userHasSalesConsultation = rankFilteredChannels.some(c => c.categoryId === SALES_CONSULTATION_CATEGORY_ID);
-        const userHasArchivedTicket = rankFilteredChannels.some(c => c.categoryId === TICKETS_ARCHIVED_CATEGORY_ID);
+        const userHasTicket = (categoryId: string) => 
+            rankFilteredChannels.some(c => 
+                c.categoryId === categoryId &&
+                !c.isClosed &&
+                (userProfile.isAdmin || c.allowedUsers?.includes(userProfile.uid))
+            );
 
+        const userHasOpenTicket = userHasTicket(TICKETS_CATEGORY_ID);
+        const userHasSalesConsultation = userHasTicket(SALES_CONSULTATION_CATEGORY_ID);
+        const userHasArchivedTicket = rankFilteredChannels.some(c => c.categoryId === TICKETS_ARCHIVED_CATEGORY_ID && (userProfile.isAdmin || c.allowedUsers?.includes(userProfile.uid)));
 
-        // 3. Now, build the final list of visible categories.
+        // 2. Determine which categories should be shown.
         const finalCategoryIds = new Set(rankFilteredChannels.map(c => c.categoryId));
 
-        // Always show the server info category.
-        finalCategoryIds.add(SERVER_INFO_CATEGORY_ID);
-        
-        // Show the support category only if the user has NO open tickets.
+        // Conditionally show Support category
         if (!userHasOpenTicket) {
              finalCategoryIds.add(SUPPORT_CATEGORY_ID);
+        } else {
+             finalCategoryIds.delete(SUPPORT_CATEGORY_ID);
         }
 
-        // The dynamic categories were already added to the set if they contained channels.
-        // Now we just filter the main list.
+        // Add dynamic categories only if they have content for the user
+        if (!userHasOpenTicket) finalCategoryIds.delete(TICKETS_CATEGORY_ID);
+        if (!userHasSalesConsultation) finalCategoryIds.delete(SALES_CONSULTATION_CATEGORY_ID);
+        if (!userHasArchivedTicket) finalCategoryIds.delete(TICKETS_ARCHIVED_CATEGORY_ID);
+
         const allPossibleCategories = [
              serverInfoCategory, 
              supportCategory, 
@@ -331,8 +362,10 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
         const finalVisibleCategories = allPossibleCategories
             .filter(cat => finalCategoryIds.has(cat.id))
             .sort((a,b) => a.order - b.order);
+        
+        const finalVisibleChannels = rankFilteredChannels.filter(chan => finalCategoryIds.has(chan.categoryId));
 
-        return { visibleCategories: finalVisibleCategories, visibleChannels: rankFilteredChannels };
+        return { visibleCategories: finalVisibleCategories, visibleChannels: finalVisibleChannels };
 
     }, [channels, categories, userProfile]);
 
