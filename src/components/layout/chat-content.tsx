@@ -352,15 +352,19 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             }
 
             const ticketName = `ticket-${userProfile.displayName.toLowerCase().replace(/\s/g, '-')}`;
-            const newChannelRef = await addDoc(collection(db, 'chatChannels'), {
+            
+            // Create the new channel document
+            const newChannelData = {
                 name: ticketName,
                 categoryId: TICKETS_CATEGORY_ID,
                 isPrivate: true,
                 isClosed: false,
                 allowedUsers: [userProfile.uid],
                 createdAt: serverTimestamp(),
-            });
+            };
+            const newChannelRef = await addDoc(collection(db, 'chatChannels'), newChannelData);
 
+            // Create the initial bot message inside the new channel
             await addDoc(collection(newChannelRef, 'messages'), {
                  text: `Olá ${userProfile.displayName}! Descreva seu problema em detalhes e um administrador irá respondê-lo em breve. Quando o problema for resolvido, você ou um administrador podem fechar este ticket.`,
                  user: { uid: 'bot', name: 'STUDIO PECC', avatar: 'https://i.imgur.com/sXliRZl.png', rank: 'admin', isAdmin: true },
@@ -371,10 +375,28 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
 
             toast({ title: "Ticket Criado!", description: `O canal #${ticketName} foi criado.`, className: "bg-green-600 text-white" });
             
-            await fetchSidebarData(); // Refetch all data to update UI correctly
-            const newChannelDoc = await getDoc(newChannelRef);
-            const newChannelData = { id: newChannelDoc.id, ...newChannelDoc.data() } as ChatChannel;
-            setActiveChannel(newChannelData);
+            // Manually add the new channel to the local state to trigger UI update
+            const newChannelForState: ChatChannel = {
+                id: newChannelRef.id,
+                ...newChannelData,
+                createdAt: new Timestamp(Date.now() / 1000, 0) // Use a client-side timestamp for immediate state update
+            };
+
+            setChannels(prev => [...prev, newChannelForState]);
+            
+            // Also add the tickets category if it doesn't exist yet for this user
+            if (!categories.some(c => c.id === TICKETS_CATEGORY_ID)) {
+                setCategories(prev => {
+                    const newCategories = [...prev];
+                     newCategories.splice(1, 0, {
+                        id: TICKETS_CATEGORY_ID, name: 'Tickets', order: 0, createdAt: new Timestamp(0, 0), allowedRanks: []
+                    });
+                    return newCategories;
+                });
+            }
+
+            // Set the new channel as active
+            setActiveChannel(newChannelForState);
 
         } catch (error) {
             console.error("Error creating ticket:", error);
