@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -880,10 +880,11 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                                     </div>
                                 ) : msg.user.isAdmin ? (
                                      <div className="font-semibold text-foreground flex items-center">
-                                       {msg.user.name}
-                                       <Badge variant="default" className="bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 ml-1.5">
-                                         <Crown className="w-3 h-3 mr-1" /> ADMIN
+                                       <Badge variant="default" className="bg-yellow-400 hover:bg-yellow-500 text-black text-[10px] font-bold px-1.5 py-0.5 mr-1.5">
+                                         ADMIN
                                        </Badge>
+                                       {msg.user.name}
+                                       <Crown className="w-4 h-4 ml-1.5 text-yellow-500" />
                                      </div>
                                  ) : (
                                     <div className="font-semibold text-foreground flex items-center">{msg.user.name} <RankIcon rank={msg.user.rank} /></div>
