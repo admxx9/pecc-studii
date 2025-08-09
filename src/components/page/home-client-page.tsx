@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, useRef } from 'react';
 import Header from '@/components/layout/header';
 import Sidebar from '@/components/layout/sidebar';
 import MainContent from '@/components/layout/main-content';
@@ -9,6 +9,7 @@ import ToolsContent from '@/components/layout/tools-content';
 import ChatContent from '@/components/layout/chat-content'; // Import ChatContent
 import AdminPanel from '@/components/layout/admin-panel';
 import SignUpForm from '@/components/auth/sign-up-form';
+import LevelUpModal from '@/components/ui/level-up-modal'; // Import the new modal
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,6 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 import { Loader2, Wrench } from 'lucide-react';
 import HomeDynamicLoader from '@/components/page/home-dynamic-loader';
+import { ranks } from '@/config/ranks';
 
 
 export interface Lesson {
@@ -83,6 +85,8 @@ export default function HomeClientPage() {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isSignUpOpen, setIsSignUpOpen] = useState(false);
   const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null);
+  const [levelUpInfo, setLevelUpInfo] = useState<{ oldRank: string, newRank: string } | null>(null);
+  const previousRankRef = useRef<string | undefined>();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -358,6 +362,22 @@ export default function HomeClientPage() {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Rerun only on mount/unmount
+
+    // Effect to detect rank changes and trigger the modal
+    useEffect(() => {
+        if (userProfile && userProfile.rank) {
+            // Check if there was a previous rank and it's different from the current one
+            if (previousRankRef.current && previousRankRef.current !== userProfile.rank && ranks[previousRankRef.current] && ranks[userProfile.rank]) {
+                console.log(`Rank changed from ${previousRankRef.current} to ${userProfile.rank}. Triggering level up modal.`);
+                setLevelUpInfo({
+                    oldRank: previousRankRef.current,
+                    newRank: userProfile.rank,
+                });
+            }
+            // Update the ref with the current rank for the next comparison
+            previousRankRef.current = userProfile.rank;
+        }
+    }, [userProfile]);
 
 
   const updateUserProgress = async (lessonId: string, completed: boolean) => {
@@ -814,6 +834,15 @@ export default function HomeClientPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
+       {levelUpInfo && userProfile && (
+            <LevelUpModal
+                isOpen={!!levelUpInfo}
+                onClose={() => setLevelUpInfo(null)}
+                oldRank={levelUpInfo.oldRank}
+                newRank={levelUpInfo.newRank}
+                userAvatar={userProfile.photoURL}
+            />
+        )}
       <style jsx global>{`
         :root {
           --header-height: 64px; /* Consistent header height */
