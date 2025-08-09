@@ -210,105 +210,95 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
 
         const categoriesQuery = query(collection(db, 'chatCategories'), orderBy('order', 'asc'));
         const channelsQuery = query(collection(db, 'chatChannels'), orderBy('createdAt', 'asc'));
-        
-        let combinedChannels: ChatChannel[] = [];
-        let combinedCategories: ChatCategory[] = [];
-
-        const processData = () => {
-             // --- Categories Logic ---
-            let allCategories = [supportCategory, ...combinedCategories];
-            
-            const userHasAccessToCategory = (categoryId: string) => {
-                 return combinedChannels.some(c => c.categoryId === categoryId && (userProfile?.isAdmin || c.allowedUsers?.includes(userProfile?.uid || '')));
-            };
-
-            const userHasOpenTickets = userHasAccessToCategory(TICKETS_CATEGORY_ID);
-            const userHasClosedTickets = userHasAccessToCategory(TICKETS_ARCHIVED_CATEGORY_ID);
-            const userHasSalesTickets = userHasAccessToCategory(SALES_CONSULTATION_CATEGORY_ID);
-
-
-            const ticketsCategoryExists = allCategories.some(c => c.id === TICKETS_CATEGORY_ID);
-            const archivedCategoryExists = allCategories.some(c => c.id === TICKETS_ARCHIVED_CATEGORY_ID);
-            const salesCategoryExists = allCategories.some(c => c.id === SALES_CONSULTATION_CATEGORY_ID);
-
-             if ((userProfile?.isAdmin || userHasSalesTickets) && !salesCategoryExists) {
-                allCategories.splice(1, 0, {
-                    id: SALES_CONSULTATION_CATEGORY_ID, name: 'Consultas de Venda', order: -0.5, createdAt: new Timestamp(0,0), allowedRanks: []
-                });
-             }
-
-            if ((userProfile?.isAdmin || userHasOpenTickets) && !ticketsCategoryExists) {
-                allCategories.splice(1, 0, {
-                    id: TICKETS_CATEGORY_ID, name: 'Tickets', order: 0, createdAt: new Timestamp(0, 0), allowedRanks: []
-                });
-            }
-             if ((userProfile?.isAdmin || userHasClosedTickets) && !archivedCategoryExists) {
-                allCategories.push({
-                    id: TICKETS_ARCHIVED_CATEGORY_ID, name: 'Tickets Finalizados', order: 99, createdAt: new Timestamp(0,0), allowedRanks: []
-                });
-             }
-             
-             allCategories.sort((a,b) => a.order - b.order);
-
-            const visibleCategories = allCategories.filter(cat => {
-                 if (userProfile?.isAdmin) return true;
-                 if (cat.id === SALES_CONSULTATION_CATEGORY_ID) return userHasSalesTickets;
-                 if (cat.id === TICKETS_CATEGORY_ID) return userHasOpenTickets;
-                 if (cat.id === TICKETS_ARCHIVED_CATEGORY_ID) return userHasClosedTickets;
-                 if (!cat.allowedRanks || cat.allowedRanks.length === 0) return true;
-                 return cat.allowedRanks.includes(userProfile?.rank || '');
-             });
-
-            setCategories(visibleCategories);
-
-            // --- Channels Logic ---
-            const visibleCategoryIds = visibleCategories.map(c => c.id);
-            const visibleChannels = combinedChannels.filter(channel => {
-                if (!visibleCategoryIds.includes(channel.categoryId)) return false;
-                if (!channel.isPrivate) return true;
-                if (userProfile?.isAdmin) return true;
-                return channel.allowedUsers?.includes(userProfile?.uid || '');
-            });
-
-            const allVisibleChannels = [supportChannel, ...visibleChannels];
-            setChannels(allVisibleChannels);
-            
-            // Set active channel logic
-            const currentActive = allVisibleChannels.find(c => c.id === activeChannelId);
-            if(currentActive) {
-                setActiveChannel(currentActive);
-            } else if (allVisibleChannels.length > 0) {
-                setActiveChannelId(supportChannel.id);
-            }
-
-            setIsLoading(false);
-        };
-
 
         const unsubCategories = onSnapshot(categoriesQuery, (snapshot) => {
-            combinedCategories = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatCategory[];
-            processData();
+            const fetchedCategories = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatCategory[];
+            setCategories(fetchedCategories);
         }, (error) => {
             console.error("Error fetching categories:", error);
             toast({ title: "Erro", description: "Não foi possível carregar as categorias.", variant: "destructive" });
-            setIsLoading(false);
         });
 
         const unsubChannels = onSnapshot(channelsQuery, (snapshot) => {
-            combinedChannels = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatChannel[];
-            processData();
+            const fetchedChannels = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatChannel[];
+            setChannels(fetchedChannels);
+            setIsLoading(false);
         }, (error) => {
             console.error("Error fetching channels:", error);
             toast({ title: "Erro", description: "Não foi possível carregar os canais.", variant: "destructive" });
-             setIsLoading(false);
+            setIsLoading(false);
         });
-        
+
         return () => {
             unsubCategories();
             unsubChannels();
         };
+    }, [toast]);
+    
+    // Derived state for visible categories and channels
+    const { visibleCategories, visibleChannels } = useMemo(() => {
+        const hasTicketIn = (categoryId: string) => 
+            channels.some(c => c.categoryId === categoryId && (userProfile?.isAdmin || c.allowedUsers?.includes(userProfile.uid)));
 
-    }, [userProfile?.uid, userProfile?.isAdmin, userProfile?.rank, toast, activeChannelId, setActiveChannelId]);
+        const userHasOpenTickets = hasTicketIn(TICKETS_CATEGORY_ID);
+        const userHasClosedTickets = hasTicketIn(TICKETS_ARCHIVED_CATEGORY_ID);
+        const userHasSalesTickets = hasTicketIn(SALES_CONSULTATION_CATEGORY_ID);
+
+        let dynamicCategories: ChatCategory[] = [];
+        if (userHasSalesTickets || userProfile?.isAdmin) {
+             dynamicCategories.push({ id: SALES_CONSULTATION_CATEGORY_ID, name: 'Consultas de Venda', order: -0.5, createdAt: new Timestamp(0,0), allowedRanks: [] });
+        }
+        if (userHasOpenTickets || userProfile?.isAdmin) {
+            dynamicCategories.push({ id: TICKETS_CATEGORY_ID, name: 'Tickets', order: 0, createdAt: new Timestamp(0, 0), allowedRanks: [] });
+        }
+         if (userHasClosedTickets || userProfile?.isAdmin) {
+            dynamicCategories.push({ id: TICKETS_ARCHIVED_CATEGORY_ID, name: 'Tickets Finalizados', order: 99, createdAt: new Timestamp(0,0), allowedRanks: [] });
+        }
+
+        const allDbCategories = [supportCategory, ...categories, ...dynamicCategories];
+
+        const visibleCategories = allDbCategories.filter(cat => {
+            if (userProfile?.isAdmin) return true;
+            if ([SUPPORT_CATEGORY_ID, TICKETS_CATEGORY_ID, TICKETS_ARCHIVED_CATEGORY_ID, SALES_CONSULTATION_CATEGORY_ID].includes(cat.id)) {
+                 return true; // The dynamic logic above already filtered these
+            }
+            if (!cat.allowedRanks || cat.allowedRanks.length === 0) return true;
+            return cat.allowedRanks.includes(userProfile?.rank || '');
+        }).sort((a,b) => a.order - b.order);
+
+        const visibleCategoryIds = new Set(visibleCategories.map(c => c.id));
+        
+        const allPossibleChannels = [supportChannel, ...channels];
+
+        const visibleChannels = allPossibleChannels.filter(channel => {
+            if (!visibleCategoryIds.has(channel.categoryId)) return false;
+            if (channel.isPrivate) {
+                return userProfile?.isAdmin || channel.allowedUsers?.includes(userProfile.uid);
+            }
+            return true;
+        });
+        
+        return { visibleCategories, visibleChannels };
+
+    }, [channels, categories, userProfile]);
+
+    // Effect to set active channel
+    useEffect(() => {
+        if (isLoading) return;
+
+        const currentActiveChannel = visibleChannels.find(c => c.id === activeChannelId);
+        
+        if (currentActiveChannel) {
+            setActiveChannel(currentActiveChannel);
+        } else if (visibleChannels.length > 0) {
+            // Default to support channel if the active one is no longer visible
+            setActiveChannelId(supportChannel.id);
+            setActiveChannel(supportChannel);
+        } else {
+             setActiveChannel(null);
+        }
+
+    }, [activeChannelId, visibleChannels, isLoading, setActiveChannelId]);
 
 
   // Firestore listener for messages
@@ -717,8 +707,8 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
                 <div className="h-6 bg-muted rounded-md animate-pulse ml-4"></div>
              </div>
           ) : (
-            <Accordion type="multiple" defaultValue={categories.map(c => c.id)} className="w-full">
-                {categories.map(category => (
+            <Accordion type="multiple" defaultValue={visibleCategories.map(c => c.id)} className="w-full">
+                {visibleCategories.map(category => (
                     <AccordionItem value={category.id} key={category.id} className="border-b-0 group/category">
                         <ContextMenu>
                             <ContextMenuTrigger disabled={!userProfile?.isAdmin || [SUPPORT_CATEGORY_ID, TICKETS_CATEGORY_ID, TICKETS_ARCHIVED_CATEGORY_ID, SALES_CONSULTATION_CATEGORY_ID].includes(category.id)}>
@@ -735,7 +725,7 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
                         </ContextMenu>
                         <AccordionContent className="pl-2 pb-1">
                             <nav className="space-y-1">
-                                {channels.filter(c => c.categoryId === category.id).map(channel => (
+                                {visibleChannels.filter(c => c.categoryId === category.id).map(channel => (
                                     <ContextMenu key={channel.id}>
                                         <ContextMenuTrigger disabled={!userProfile?.isAdmin || channel.id === SUPPORT_CHANNEL_ID || channel.isClosed}>
                                             <Button
@@ -1124,4 +1114,3 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
   );
 }
 
-    
