@@ -90,6 +90,7 @@ export default function HomeClientPage() {
   const [levelUpInfo, setLevelUpInfo] = useState<{ oldRank: string, newRank: string } | null>(null);
   const previousRankRef = useRef<string | undefined>();
   const [activeChatChannelId, setActiveChatChannelId] = useState<string | null>(null);
+  const [triggerSalesTicket, setTriggerSalesTicket] = useState(false);
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -487,44 +488,13 @@ export default function HomeClientPage() {
     // (using searchParams in ToolsContent is better for this)
   };
 
-  const handleCreateSalesTicket = async () => {
-    if (!userProfile || !db) {
-        toast({ title: "Ação Necessária", description: "Faça login para iniciar uma consulta.", variant: "destructive" });
-        return;
-    }
-
-    // Switch to chat tab
+  const handleCreateSalesTicket = () => {
     setActiveTab('chat');
+    setTriggerSalesTicket(true);
+  };
 
-    try {
-        const ticketName = `venda-${userProfile.displayName.toLowerCase().replace(/\s/g, '-')}`;
-        const newChannelData = {
-            name: ticketName,
-            categoryId: SALES_CONSULTATION_CATEGORY_ID,
-            isPrivate: true,
-            isClosed: false,
-            allowedUsers: [userProfile.uid],
-            createdAt: serverTimestamp(),
-        };
-        const newChannelRef = await addDoc(collection(db, 'chatChannels'), newChannelData);
-
-        await addDoc(collection(newChannelRef, 'messages'), {
-            text: `Olá ${userProfile.displayName}! Bem-vindo(a) à sua consulta de encomenda de mapas. Por favor, descreva em detalhes o mapa que você deseja (Ex: conversão de GTA V para SA-MP, mapa de favela, etc). Nossa equipe entrará em contato em breve.`,
-            user: { uid: 'bot', name: 'Assistente de Vendas', avatar: 'https://i.imgur.com/sXliRZl.png', rank: 'admin', isAdmin: true },
-            createdAt: serverTimestamp(),
-            isBotMessage: true,
-        });
-
-        toast({ title: "Consulta Iniciada!", description: `Um canal privado foi criado para sua encomenda.`, className: "bg-green-600 text-white" });
-        
-        // The real-time listener in ChatContent will pick up the new channel.
-        // We just need to set it as active.
-        setActiveChatChannelId(newChannelRef.id);
-
-    } catch (error) {
-        console.error("Error creating sales ticket:", error);
-        toast({ title: "Erro", description: "Não foi possível iniciar a consulta.", variant: "destructive" });
-    }
+  const handleSalesTicketHandled = () => {
+    setTriggerSalesTicket(false);
   };
 
 
@@ -789,7 +759,7 @@ export default function HomeClientPage() {
               </>
              )}
             {!isLoading && activeTab === 'chat' && (
-              <ChatContent userProfile={userProfile} activeChannelId={activeChatChannelId} setActiveChannelId={setActiveChatChannelId} />
+              <ChatContent userProfile={userProfile} activeChannelId={activeChatChannelId} setActiveChannelId={setActiveChatChannelId} triggerSalesTicket={triggerSalesTicket} onSalesTicketHandled={handleSalesTicketHandled} />
             )}
             {!isLoading && activeTab === 'admin' && userProfile?.isAdmin && (
                 <div className="w-full">

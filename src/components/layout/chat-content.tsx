@@ -98,6 +98,8 @@ interface ChatContentProps {
   userProfile: UserProfile | null;
   activeChannelId: string | null;
   setActiveChannelId: (id: string | null) => void;
+  triggerSalesTicket: boolean;
+  onSalesTicketHandled: () => void;
 }
 
 const EMOJI_LIST = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🤔'];
@@ -187,7 +189,7 @@ const renderMessageText = (text: string) => {
 };
 
 
-export default function ChatContent({ userProfile, activeChannelId, setActiveChannelId }: ChatContentProps) {
+export default function ChatContent({ userProfile, activeChannelId, setActiveChannelId, triggerSalesTicket, onSalesTicketHandled }: ChatContentProps) {
     const [categories, setCategories] = useState<ChatCategory[]>([]);
     const [channels, setChannels] = useState<ChatChannel[]>([]);
     const [activeChannel, setActiveChannel] = useState<ChatChannel | null>(null);
@@ -236,6 +238,49 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
         fetchUsers();
     }, []);
 
+    const handleCreateSalesTicket = useCallback(async () => {
+        if (!userProfile || !db) {
+            toast({ title: "Ação Necessária", description: "Faça login para iniciar uma consulta.", variant: "destructive" });
+            return;
+        }
+        setIsCreatingTicket(true);
+        try {
+            const ticketName = `venda-${userProfile.displayName.toLowerCase().replace(/\s/g, '-')}`;
+            const newChannelData = {
+                name: ticketName,
+                categoryId: SALES_CONSULTATION_CATEGORY_ID,
+                isPrivate: true,
+                isClosed: false,
+                allowedUsers: [userProfile.uid],
+                createdAt: serverTimestamp(),
+            };
+            const newChannelRef = await addDoc(collection(db, 'chatChannels'), newChannelData);
+
+            await addDoc(collection(newChannelRef, 'messages'), {
+                text: 'Olá! Bem-vindo à sua consulta de encomenda de mapas. Selecione um dos itens abaixo para expressar seu interesse ou descreva sua necessidade.',
+                user: { uid: 'bot', name: 'Assistente de Vendas', avatar: 'https://i.imgur.com/sXliRZl.png', rank: 'admin', isAdmin: true },
+                createdAt: serverTimestamp(),
+                isBotMessage: true,
+                messageType: 'sales_pitch',
+            });
+            
+            toast({ title: "Consulta Iniciada!", description: `Um canal privado foi criado para sua encomenda.`, className: "bg-green-600 text-white" });
+            setActiveChannelId(newChannelRef.id);
+        } catch (error) {
+            console.error("Error creating sales ticket:", error);
+            toast({ title: "Erro", description: "Não foi possível iniciar a consulta.", variant: "destructive" });
+        } finally {
+            setIsCreatingTicket(false);
+            onSalesTicketHandled();
+        }
+    }, [userProfile, db, toast, setActiveChannelId, onSalesTicketHandled]);
+
+    useEffect(() => {
+        if (triggerSalesTicket) {
+            handleCreateSalesTicket();
+        }
+    }, [triggerSalesTicket, handleCreateSalesTicket]);
+
     // Set up real-time listeners for categories and channels
     useEffect(() => {
         if (!db || !userProfile) return;
@@ -243,51 +288,35 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
     
         const categoriesQuery = query(collection(db, 'chatCategories'), orderBy('order', 'asc'));
     
-        const channelsCol = collection(db, 'chatChannels');
-        let unsubscribers: Unsubscribe[] = [];
+        const unsubscribers: Unsubscribe[] = [];
 
-        // Listener for public channels
-        const publicChannelsQuery = query(channelsCol, where('isPrivate', '!=', true));
-        const unsubPublic = onSnapshot(publicChannelsQuery, (snapshot) => {
-            const publicChannels = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatChannel[];
-            setChannels(prev => {
-                const otherChannels = prev.filter(c => c.isPrivate === true);
-                const combined = [...otherChannels, ...publicChannels];
-                return Array.from(new Map(combined.map(item => [item['id'], item])).values());
-            });
-        }, (error) => console.error("Error fetching public channels:", error));
-        unsubscribers.push(unsubPublic);
+        // Public channels
+        const publicChannelsQuery = query(collection(db, "chatChannels"), where("isPrivate", "!=", true));
+        unsubscribers.push(onSnapshot(publicChannelsQuery, (snapshot) => {
+            const publicChannels = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as ChatChannel }));
+            setChannels(prev => [...prev.filter(c => c.isPrivate), ...publicChannels]);
+        }, (error) => console.error("Error fetching public channels:", error)));
 
-        // Listener for private channels user is part of
-        const privateChannelsQuery = query(channelsCol, where('isPrivate', '==', true), where('allowedUsers', 'array-contains', userProfile.uid));
-        const unsubPrivate = onSnapshot(privateChannelsQuery, (snapshot) => {
-            const privateChannels = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatChannel[];
-             setChannels(prev => {
-                const otherChannels = prev.filter(c => !(c.isPrivate && c.allowedUsers?.includes(userProfile.uid)));
-                const combined = [...otherChannels, ...privateChannels];
-                return Array.from(new Map(combined.map(item => [item['id'], item])).values());
-            });
-        }, (error) => console.error("Error fetching private channels:", error));
-        unsubscribers.push(unsubPrivate);
+        // Private channels user is part of
+        const privateChannelsQuery = query(collection(db, 'chatChannels'), where('isPrivate', '==', true), where('allowedUsers', 'array-contains', userProfile.uid));
+        unsubscribers.push(onSnapshot(privateChannelsQuery, (snapshot) => {
+            const privateChannels = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as ChatChannel }));
+            setChannels(prev => [...prev.filter(c => !c.allowedUsers?.includes(userProfile.uid)), ...privateChannels]);
+        }, (error) => console.error("Error fetching private channels:", error)));
 
-        // If user is admin, they need to see ALL private channels, so a third listener is needed.
+        // All channels for admin
         if (userProfile.isAdmin) {
-             const allPrivateQuery = query(channelsCol, where('isPrivate', '==', true));
-             const unsubAdmin = onSnapshot(allPrivateQuery, (snapshot) => {
-                 const allPrivateChannels = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatChannel[];
-                 setChannels(prev => {
-                    const otherChannels = prev.filter(c => c.isPrivate !== true);
-                    const combined = [...otherChannels, ...allPrivateChannels];
-                    return Array.from(new Map(combined.map(item => [item['id'], item])).values());
-                });
-             }, (error) => console.error("Error fetching admin channels:", error));
-             unsubscribers.push(unsubAdmin);
+            const allChannelsQuery = query(collection(db, 'chatChannels'));
+            unsubscribers.push(onSnapshot(allChannelsQuery, (snapshot) => {
+                const allChans = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as ChatChannel }));
+                 setChannels(allChans);
+            }, (error) => console.error("Error fetching all admin channels:", error)));
         }
     
         const unsubCategories = onSnapshot(categoriesQuery, (snapshot) => {
             const fetchedCategories = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatCategory[];
             setCategories(fetchedCategories);
-            setIsLoading(false); // Consider loading finished when categories are loaded
+            setIsLoading(false);
         }, (error) => {
             console.error("Error fetching categories:", error);
             toast({ title: "Erro", description: "Não foi possível carregar as categorias.", variant: "destructive" });
@@ -295,38 +324,31 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
         });
         unsubscribers.push(unsubCategories);
 
-    
-        return () => {
-           unsubscribers.forEach(unsub => unsub());
-        };
+        return () => unsubscribers.forEach(unsub => unsub());
     }, [toast, userProfile]);
     
      // Derived state for visible categories and channels
     const { visibleCategories, visibleChannels } = useMemo(() => {
         if (!userProfile) return { visibleCategories: [], visibleChannels: [] };
-        
-        // 1. Filter all available channels to what the user can see based on category rank permissions.
-        const rankFilteredChannels = [serverInfoChannel, supportChannel, ...channels].filter(channel => {
+
+        const allVisibleChannels = [serverInfoChannel, supportChannel, ...channels].filter(channel => {
             if (userProfile.isAdmin) return true;
             if (channel.isPrivate) return channel.allowedUsers?.includes(userProfile.uid);
             
             const parentCategory = categories.find(c => c.id === channel.categoryId);
-            if (!parentCategory) return true;
-            
+            if (!parentCategory) return true; // Show if category is not defined (e.g. built-in ones before fetch)
+
             if (parentCategory.allowedRanks && parentCategory.allowedRanks.length > 0) {
                  return parentCategory.allowedRanks.includes(userProfile.rank || '');
             }
-            return true;
+            return true; // Public category
         });
 
-        const userHasChannelInCategory = (categoryId: string) => 
-            rankFilteredChannels.some(c => c.categoryId === categoryId);
+        const hasChannelInCategory = (categoryId: string) => 
+            allVisibleChannels.some(c => c.categoryId === categoryId);
 
-        const userHasOpenTicket = userHasChannelInCategory(TICKETS_CATEGORY_ID);
-        const userHasSalesConsultation = userHasChannelInCategory(SALES_CONSULTATION_CATEGORY_ID);
-        const userHasArchivedTicket = userHasChannelInCategory(TICKETS_ARCHIVED_CATEGORY_ID);
+        const hasOpenTicket = hasChannelInCategory(TICKETS_CATEGORY_ID);
 
-        // 2. Determine which categories should be shown.
         const allPossibleCategories = [
              serverInfoCategory, 
              supportCategory, 
@@ -338,18 +360,12 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
 
         const finalVisibleCategories = allPossibleCategories
             .filter(cat => {
-                 if (cat.id === SUPPORT_CATEGORY_ID) return !userHasOpenTicket; // Show support only if no open ticket
-                 if (cat.id === TICKETS_CATEGORY_ID) return userHasOpenTicket;
-                 if (cat.id === SALES_CONSULTATION_CATEGORY_ID) return userHasSalesConsultation;
-                 if (cat.id === TICKETS_ARCHIVED_CATEGORY_ID) return userHasArchivedTicket;
-                 // For regular and server info categories, show if they have visible channels
-                 return userHasChannelInCategory(cat.id);
+                 if (cat.id === SUPPORT_CATEGORY_ID) return !hasOpenTicket;
+                 return hasChannelInCategory(cat.id);
             })
             .sort((a,b) => a.order - b.order);
         
-        const finalVisibleChannels = rankFilteredChannels;
-
-        return { visibleCategories: finalVisibleCategories, visibleChannels: finalVisibleChannels };
+        return { visibleCategories: finalVisibleCategories, visibleChannels: allVisibleChannels };
 
     }, [channels, categories, userProfile]);
 
@@ -1004,7 +1020,7 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
                                                 <Image src="https://i.imgur.com/uF1pfaW.jpeg" alt="GTA V Map" width={300} height={150} className="w-full h-24 object-cover" data-ai-hint="gta5 city" />
                                             </CardHeader>
                                             <CardContent className="p-3">
-                                                <CardTitle as="h3" className="text-base font-semibold mb-1">Conversão de Mapa: GTA V</CardTitle>
+                                                <h3 className="text-base font-semibold mb-1">Conversão de Mapa: GTA V</h3>
                                                 <p className="text-xs text-muted-foreground mb-3">Traga a vastidão e os detalhes de Los Santos para o seu servidor.</p>
                                                 <Button size="sm" className="w-full" onClick={() => handleBotActionClick('express_interest', { productName: 'GTA V' })}>Tenho Interesse</Button>
                                             </CardContent>
@@ -1015,7 +1031,7 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
                                                 <Image src="https://i.imgur.com/wLdG12M.jpeg" alt="GTA IV Map" width={300} height={150} className="w-full h-24 object-cover" data-ai-hint="gta4 city" />
                                             </CardHeader>
                                             <CardContent className="p-3">
-                                                <CardTitle as="h3" className="text-base font-semibold mb-1">Conversão de Mapa: GTA IV</CardTitle>
+                                                <h3 className="text-base font-semibold mb-1">Conversão de Mapa: GTA IV</h3>
                                                 <p className="text-xs text-muted-foreground mb-3">A atmosfera única e a complexidade de Liberty City em seu projeto.</p>
                                                 <Button size="sm" className="w-full" onClick={() => handleBotActionClick('express_interest', { productName: 'GTA IV' })}>Tenho Interesse</Button>
                                             </CardContent>
