@@ -48,6 +48,7 @@ import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, Timestamp, doc, deleteDoc, updateDoc, arrayUnion, arrayRemove, getDoc, writeBatch, where, getDocs, setDoc, Unsubscribe, or } from 'firebase/firestore';
 import { useToast } from "@/hooks/use-toast";
 import { ranks, rankKeys, rankIcons } from '@/config/ranks';
+import Image from 'next/image';
 
 
 // --- Types ---
@@ -90,6 +91,7 @@ interface ChatMessage {
   reactions?: { [emoji: string]: string[] }; // Map of emoji to array of user UIDs
   isBotMessage?: boolean; // Flag for bot messages
   actions?: { text: string; actionId: string }[];
+  messageType?: 'sales_pitch' | null;
 }
 
 interface ChatContentProps {
@@ -241,9 +243,7 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
     
         const categoriesQuery = query(collection(db, 'chatCategories'), orderBy('order', 'asc'));
     
-        // Correctly query for channels. Instead of one complex 'or' query, we can use multiple listeners and combine the results.
         const channelsCol = collection(db, 'chatChannels');
-        
         let unsubscribers: Unsubscribe[] = [];
 
         // Listener for public channels
@@ -305,51 +305,28 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
     const { visibleCategories, visibleChannels } = useMemo(() => {
         if (!userProfile) return { visibleCategories: [], visibleChannels: [] };
         
-        // 1. Filter all available channels (from state) to what the user can see based on category rank permissions.
+        // 1. Filter all available channels to what the user can see based on category rank permissions.
         const rankFilteredChannels = [serverInfoChannel, supportChannel, ...channels].filter(channel => {
-            // Admins see everything.
             if (userProfile.isAdmin) return true;
-    
-            // Private channels (tickets, consultations) are governed by `allowedUsers`, not ranks.
             if (channel.isPrivate) return channel.allowedUsers?.includes(userProfile.uid);
             
-            // For public channels, check the parent category's allowed ranks.
             const parentCategory = categories.find(c => c.id === channel.categoryId);
-            if (!parentCategory) return true; // If no category found (like for static channels), it's public.
+            if (!parentCategory) return true;
             
-            // If ranks are defined, user must have one of them. If empty, it's public.
             if (parentCategory.allowedRanks && parentCategory.allowedRanks.length > 0) {
                  return parentCategory.allowedRanks.includes(userProfile.rank || '');
             }
             return true;
         });
 
-        const userHasTicket = (categoryId: string) => 
-            rankFilteredChannels.some(c => 
-                c.categoryId === categoryId &&
-                !c.isClosed &&
-                (userProfile.isAdmin || c.allowedUsers?.includes(userProfile.uid))
-            );
+        const userHasChannelInCategory = (categoryId: string) => 
+            rankFilteredChannels.some(c => c.categoryId === categoryId);
 
-        const userHasOpenTicket = userHasTicket(TICKETS_CATEGORY_ID);
-        const userHasSalesConsultation = userHasTicket(SALES_CONSULTATION_CATEGORY_ID);
-        const userHasArchivedTicket = rankFilteredChannels.some(c => c.categoryId === TICKETS_ARCHIVED_CATEGORY_ID && (userProfile.isAdmin || c.allowedUsers?.includes(userProfile.uid)));
+        const userHasOpenTicket = userHasChannelInCategory(TICKETS_CATEGORY_ID);
+        const userHasSalesConsultation = userHasChannelInCategory(SALES_CONSULTATION_CATEGORY_ID);
+        const userHasArchivedTicket = userHasChannelInCategory(TICKETS_ARCHIVED_CATEGORY_ID);
 
         // 2. Determine which categories should be shown.
-        const finalCategoryIds = new Set(rankFilteredChannels.map(c => c.categoryId));
-
-        // Conditionally show Support category
-        if (!userHasOpenTicket) {
-             finalCategoryIds.add(SUPPORT_CATEGORY_ID);
-        } else {
-             finalCategoryIds.delete(SUPPORT_CATEGORY_ID);
-        }
-
-        // Add dynamic categories only if they have content for the user
-        if (!userHasOpenTicket) finalCategoryIds.delete(TICKETS_CATEGORY_ID);
-        if (!userHasSalesConsultation) finalCategoryIds.delete(SALES_CONSULTATION_CATEGORY_ID);
-        if (!userHasArchivedTicket) finalCategoryIds.delete(TICKETS_ARCHIVED_CATEGORY_ID);
-
         const allPossibleCategories = [
              serverInfoCategory, 
              supportCategory, 
@@ -360,10 +337,17 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
         ];
 
         const finalVisibleCategories = allPossibleCategories
-            .filter(cat => finalCategoryIds.has(cat.id))
+            .filter(cat => {
+                 if (cat.id === SUPPORT_CATEGORY_ID) return !userHasOpenTicket; // Show support only if no open ticket
+                 if (cat.id === TICKETS_CATEGORY_ID) return userHasOpenTicket;
+                 if (cat.id === SALES_CONSULTATION_CATEGORY_ID) return userHasSalesConsultation;
+                 if (cat.id === TICKETS_ARCHIVED_CATEGORY_ID) return userHasArchivedTicket;
+                 // For regular and server info categories, show if they have visible channels
+                 return userHasChannelInCategory(cat.id);
+            })
             .sort((a,b) => a.order - b.order);
         
-        const finalVisibleChannels = rankFilteredChannels.filter(chan => finalCategoryIds.has(chan.categoryId));
+        const finalVisibleChannels = rankFilteredChannels;
 
         return { visibleCategories: finalVisibleCategories, visibleChannels: finalVisibleChannels };
 
@@ -378,7 +362,6 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
         if (currentActiveChannel) {
             setActiveChannel(currentActiveChannel);
         } else if (visibleChannels.length > 0) {
-            // Default to server info channel if the active one is no longer visible
             setActiveChannelId(serverInfoChannel.id);
             setActiveChannel(serverInfoChannel);
         } else {
@@ -433,13 +416,28 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
 
 
   // --- Event Handlers ---
-   const handleBotActionClick = async (actionId: string) => {
+   const handleBotActionClick = async (actionId: string, customData?: any) => {
         if (actionId === 'create-ticket') {
             await handleCreateTicket();
         } else if (actionId === 'close-ticket') {
             if (activeChannel) {
                 setItemToManage({ type: 'channel', action: 'close', item: activeChannel });
             }
+        } else if (actionId === 'express_interest' && customData?.productName && userProfile && activeChannel) {
+             const interestMessage = `Olá, tenho interesse na conversão do mapa ${customData.productName}. Poderiam me passar mais detalhes sobre o processo e orçamento?`;
+             await addDoc(collection(db, 'chatChannels', activeChannel.id, 'messages'), {
+                text: interestMessage,
+                user: {
+                  uid: userProfile.uid,
+                  name: userProfile.displayName,
+                  avatar: userProfile.photoURL,
+                  rank: userProfile.rank,
+                  isAdmin: userProfile.isAdmin,
+                },
+                createdAt: serverTimestamp(),
+                replyTo: null,
+                reactions: {},
+            });
         }
     };
 
@@ -451,7 +449,12 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
         setIsCreatingTicket(true);
         try {
             // Check if user already has an open ticket to prevent spam
-            const ticketsQuery = query(collection(db, 'chatChannels'), where('isPrivate', '==', true), where('categoryId', '==', TICKETS_CATEGORY_ID), where('allowedUsers', 'array-contains', userProfile.uid), where('isClosed', '!=', true));
+            const ticketsQuery = query(
+                collection(db, 'chatChannels'),
+                where('allowedUsers', 'array-contains', userProfile.uid),
+                where('categoryId', '==', TICKETS_CATEGORY_ID)
+            );
+
             const existingTickets = await getDocs(ticketsQuery);
             if (!existingTickets.empty) {
                 toast({ title: "Ticket Existente", description: "Você já possui um ticket de suporte aberto.", variant: "default", className: "bg-yellow-500 border-yellow-500 text-black" });
@@ -482,11 +485,7 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
             });
 
             toast({ title: "Ticket Criado!", description: `O canal #${ticketName} foi criado.`, className: "bg-green-600 text-white" });
-            
-            // The real-time listener will automatically add the channel to the UI for everyone.
-            // We just need to set it as active for the current user.
             setActiveChannelId(newChannelRef.id);
-
 
         } catch (error) {
             console.error("Error creating ticket:", error);
@@ -622,8 +621,6 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
                 });
                 toast({ title: "Canal Criado!" });
             }
-            // The real-time listener will handle the UI update
-
             setIsChannelModalOpen(false);
             setEditingChannel(null);
             setChannelName('');
@@ -657,9 +654,6 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
                 });
                 toast({ title: "Categoria Criada!" });
             }
-
-            // The real-time listener will handle the UI update
-
             setIsCategoryModalOpen(false);
             setNewCategoryName('');
             setNewCategoryOrder(0);
@@ -680,7 +674,6 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
             if (type === 'channel') {
                 const channel = item as ChatChannel;
                 if (action === 'delete') {
-                    // TODO: Also delete all messages within the channel in a batch
                     await deleteDoc(doc(db, 'chatChannels', channel.id));
                     if (activeChannel?.id === channel.id) { setActiveChannelId(supportChannel.id); }
                     toast({ title: "Canal Excluído", description: `O canal #${channel.name} foi removido.` });
@@ -707,7 +700,6 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
 
                 const channelsToDelete = channels.filter(c => c.categoryId === category.id);
                 channelsToDelete.forEach(c => {
-                    // TODO: Also delete all messages within each channel
                     batch.delete(doc(db, 'chatChannels', c.id));
                      if (activeChannel?.categoryId === c.categoryId) {
                         setActiveChannelId(supportChannel.id);
@@ -1001,7 +993,40 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
                                 )}
                                 <p className="text-xs text-muted-foreground">{formatDate(msg.createdAt)}</p>
                             </div>
-                            <div className="text-sm text-foreground/90 whitespace-pre-wrap">{renderMessageText(msg.text)}</div>
+
+                            {msg.messageType === 'sales_pitch' ? (
+                                <div>
+                                    <p className="text-sm text-foreground/90 whitespace-pre-wrap mb-4">{renderMessageText(msg.text)}</p>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                        {/* GTA V Card */}
+                                        <Card className="overflow-hidden bg-secondary">
+                                            <CardHeader className="p-0">
+                                                <Image src="https://i.imgur.com/uF1pfaW.jpeg" alt="GTA V Map" width={300} height={150} className="w-full h-24 object-cover" data-ai-hint="gta5 city" />
+                                            </CardHeader>
+                                            <CardContent className="p-3">
+                                                <CardTitle as="h3" className="text-base font-semibold mb-1">Conversão de Mapa: GTA V</CardTitle>
+                                                <p className="text-xs text-muted-foreground mb-3">Traga a vastidão e os detalhes de Los Santos para o seu servidor.</p>
+                                                <Button size="sm" className="w-full" onClick={() => handleBotActionClick('express_interest', { productName: 'GTA V' })}>Tenho Interesse</Button>
+                                            </CardContent>
+                                        </Card>
+                                        {/* GTA IV Card */}
+                                        <Card className="overflow-hidden bg-secondary">
+                                            <CardHeader className="p-0">
+                                                <Image src="https://i.imgur.com/wLdG12M.jpeg" alt="GTA IV Map" width={300} height={150} className="w-full h-24 object-cover" data-ai-hint="gta4 city" />
+                                            </CardHeader>
+                                            <CardContent className="p-3">
+                                                <CardTitle as="h3" className="text-base font-semibold mb-1">Conversão de Mapa: GTA IV</CardTitle>
+                                                <p className="text-xs text-muted-foreground mb-3">A atmosfera única e a complexidade de Liberty City em seu projeto.</p>
+                                                <Button size="sm" className="w-full" onClick={() => handleBotActionClick('express_interest', { productName: 'GTA IV' })}>Tenho Interesse</Button>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground text-center">Precisa de outro mapa? Descreva sua necessidade e faremos um orçamento. Todos os serviços possuem garantia de satisfação e política de reembolso.</p>
+                                </div>
+                            ) : (
+                                <div className="text-sm text-foreground/90 whitespace-pre-wrap">{renderMessageText(msg.text)}</div>
+                            )}
+
                              {msg.actions && msg.actions.length > 0 && !activeChannel?.isClosed && (
                                  <div className="mt-2 flex gap-2">
                                      {msg.actions.map(action => (
