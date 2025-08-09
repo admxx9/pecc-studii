@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { ranks, rankIcons } from '@/config/ranks';
+import { ranks, rankIcons, avatarsByRank } from '@/config/ranks';
 import { Award } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Confetti from 'react-confetti';
@@ -28,6 +28,9 @@ const LevelUpModal: React.FC<LevelUpModalProps> = ({ isOpen, onClose, oldRank, n
     const oldRankName = ranks[oldRank] || 'Desconhecido';
     const newRankName = ranks[newRank] || 'Novo Nível';
     const NewRankIcon = rankIcons[newRank] || Award;
+    const oldAvatar = userAvatar;
+    // Select the first avatar of the new rank as the "promotion" avatar
+    const newAvatar = (avatarsByRank[newRank] && avatarsByRank[newRank][0]?.url) || userAvatar;
 
     // This effect orchestrates the entire animation sequence
     useEffect(() => {
@@ -70,6 +73,9 @@ const LevelUpModal: React.FC<LevelUpModalProps> = ({ isOpen, onClose, oldRank, n
 
     if (!isOpen) return null;
 
+    // Determine which avatar to display based on the animation step
+    const displayAvatar = (animationStep === 'reveal' || animationStep === 'finished') ? newAvatar : oldAvatar;
+
     return (
         <Dialog open={isOpen} onOpenChange={handleClose}>
             <DialogContent className="sm:max-w-md bg-card border-border shadow-2xl overflow-hidden p-0">
@@ -98,7 +104,7 @@ const LevelUpModal: React.FC<LevelUpModalProps> = ({ isOpen, onClose, oldRank, n
                                 ? 'border-yellow-500 scale-110 shadow-lg'
                                 : 'border-border'
                             )}>
-                                <AvatarImage src={userAvatar || undefined} />
+                                <AvatarImage src={displayAvatar || undefined} />
                                 <AvatarFallback>{'AV'}</AvatarFallback>
                             </Avatar>
                         </div>
@@ -121,11 +127,14 @@ const LevelUpModal: React.FC<LevelUpModalProps> = ({ isOpen, onClose, oldRank, n
                          </div>
                     </div>
 
-                    {/* Progress Bar Container */}
-                    <div className="w-full bg-secondary rounded-full h-4 mb-8 border border-border">
+                    {/* Progress Bar Container - now with transition for hiding */}
+                    <div className={cn(
+                        "w-full bg-secondary rounded-full h-4 mb-8 border border-border transition-opacity duration-300",
+                        (animationStep === 'reveal' || animationStep === 'finished') ? 'opacity-0' : 'opacity-100'
+                    )}>
                         <div
                             style={{ width: `${progress}%` }}
-                            className="bg-primary h-full rounded-full transition-all duration-1000 ease-in-out"
+                            className="bg-green-600 h-full rounded-full transition-all duration-1000 ease-in-out"
                         ></div>
                     </div>
 

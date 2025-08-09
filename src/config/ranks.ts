@@ -26,3 +26,22 @@ export const rankIcons: { [key: string]: React.ElementType } = {
     master_modder: Crown,
     admin: Crown,
 };
+
+// Avatars organized by rank
+export const avatarsByRank: { [key: string]: { id: string; url: string }[] } = {
+  iniciante: [
+    { id: 'iniciante1', url: 'https://i.imgur.com/D496jwP.png' }, // fundo vermelho
+    { id: 'iniciante2', url: 'https://i.imgur.com/WMK9rJs.png' }, // fundo azul
+    { id: 'iniciante3', url: 'https://i.imgur.com/BwGqgFs.png' }, // fundo roxo
+    { id: 'iniciante4', url: 'https://i.imgur.com/IrMkLO8.png' }, // fundo cinza
+    { id: 'iniciante5', url: 'https://i.imgur.com/OFi0aNr.png' }, // fundo laranja
+  ],
+  modder_junior: [
+    { id: 'modder_junior1', url: 'https://i.imgur.com/YHKlctd.png' }, // vermelho
+    { id: 'modder_junior3', url: 'https://i.imgur.com/JzCZVwr.png' }, // azul
+    { id: 'modder_junior2', url: 'https://i.imgur.com/zzC6acG.png' }, // roxo
+    { id: 'modder_junior4', url: 'https://i.imgur.com/QEfDDEw.png' }, // cinza
+    { id: 'modder_junior5', url: 'https://i.imgur.com/1SR35DZ.png' }, // laranja
+  ],
+  // Add other ranks as needed
+};
