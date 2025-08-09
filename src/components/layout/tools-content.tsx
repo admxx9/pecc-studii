@@ -1,10 +1,11 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Download, Loader2, AlertTriangle, Wrench, Star, Lock, Info, Filter, ArrowUpDown, Tag, ShoppingCart } from 'lucide-react';
+import { Download, Loader2, AlertTriangle, Wrench, Star, Lock, Info, Filter, ArrowUpDown, Tag, ShoppingCart, MessageSquarePlus } from 'lucide-react';
 import {
     Select,
     SelectContent,
@@ -25,6 +26,7 @@ import Image from 'next/image';
 
 interface ToolsContentProps {
   selectedCategory: string | null;
+  onCreateSalesTicket: () => void;
 }
 
 const canUserAccessTool = (
@@ -39,7 +41,7 @@ const canUserAccessTool = (
     return false;
  };
 
-export default function ToolsContent({ selectedCategory }: ToolsContentProps) {
+export default function ToolsContent({ selectedCategory, onCreateSalesTicket }: ToolsContentProps) {
     const [tools, setTools] = useState<Tool[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isNavigating, setIsNavigating] = useState<string | null>(null);
@@ -212,26 +214,47 @@ export default function ToolsContent({ selectedCategory }: ToolsContentProps) {
                         {isLoading ? 'Carregando...' : `Explore os itens disponíveis.`}
                     </CardDescription>
                      {selectedCategory === 'loja' && !isLoading && (
-                        <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                            <div className="flex items-center gap-2">
-                                <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
-                                <Select onValueChange={setSortOrder} defaultValue={sortOrder}>
-                                    <SelectTrigger className="w-full sm:w-[180px] bg-background">
-                                        <SelectValue placeholder="Ordenar por..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="desc">Maior Preço</SelectItem>
-                                        <SelectItem value="asc">Menor Preço</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                                 <Tag className="h-4 w-4 text-muted-foreground" />
-                                {allTags.length > 0 ? allTags.map(tag => (
-                                    <Button key={tag} variant={activeTags.includes(tag) ? 'default' : 'outline'} size="sm" onClick={() => handleTagClick(tag)} className="capitalize text-xs h-8">
-                                        {tag}
-                                    </Button>
-                                )) : <p className="text-xs text-muted-foreground">Nenhuma tag encontrada.</p>}
+                        <div className="space-y-4 pt-4">
+                             {/* Sales Consultation Card */}
+                            <Card className="bg-secondary/50 border-primary/20">
+                                 <CardHeader>
+                                    <CardTitle className="text-lg flex items-center gap-2">
+                                        <Wrench className="h-5 w-5 text-primary"/>
+                                        Encomendar Conversão de Mapa
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Precisa de um mapa específico como GTA V, GTA IV, ou outro? Inicie uma consulta para discutir os detalhes e o orçamento.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                     <Button onClick={onCreateSalesTicket}>
+                                        <MessageSquarePlus className="mr-2 h-4 w-4"/>
+                                        Iniciar Consulta
+                                     </Button>
+                                </CardContent>
+                            </Card>
+
+                            <div className="flex flex-col sm:flex-row gap-4">
+                                <div className="flex items-center gap-2">
+                                    <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+                                    <Select onValueChange={setSortOrder} defaultValue={sortOrder}>
+                                        <SelectTrigger className="w-full sm:w-[180px] bg-background">
+                                            <SelectValue placeholder="Ordenar por..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="desc">Maior Preço</SelectItem>
+                                            <SelectItem value="asc">Menor Preço</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                     <Tag className="h-4 w-4 text-muted-foreground" />
+                                    {allTags.length > 0 ? allTags.map(tag => (
+                                        <Button key={tag} variant={activeTags.includes(tag) ? 'default' : 'outline'} size="sm" onClick={() => handleTagClick(tag)} className="capitalize text-xs h-8">
+                                            {tag}
+                                        </Button>
+                                    )) : <p className="text-xs text-muted-foreground">Nenhuma tag encontrada.</p>}
+                                </div>
                             </div>
                         </div>
                     )}

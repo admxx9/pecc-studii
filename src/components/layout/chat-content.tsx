@@ -94,6 +94,8 @@ interface ChatMessage {
 
 interface ChatContentProps {
   userProfile: UserProfile | null;
+  activeChannelId: string | null;
+  setActiveChannelId: (id: string | null) => void;
 }
 
 const EMOJI_LIST = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🤔'];
@@ -103,6 +105,8 @@ const SUPPORT_CATEGORY_ID = 'support-category';
 const SUPPORT_CHANNEL_ID = 'support-channel';
 const TICKETS_CATEGORY_ID = 'tickets-category';
 const TICKETS_ARCHIVED_CATEGORY_ID = 'tickets-archived-category';
+const SALES_CONSULTATION_CATEGORY_ID = 'sales-consultation-category';
+
 
 // Static Support Content
 const botMessage: ChatMessage = {
@@ -150,7 +154,7 @@ const renderMessageText = (text: string) => {
 };
 
 
-export default function ChatContent({ userProfile }: ChatContentProps) {
+export default function ChatContent({ userProfile, activeChannelId, setActiveChannelId }: ChatContentProps) {
     const [categories, setCategories] = useState<ChatCategory[]>([]);
     const [channels, setChannels] = useState<ChatChannel[]>([]);
     const [activeChannel, setActiveChannel] = useState<ChatChannel | null>(null);
@@ -211,26 +215,31 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         let combinedCategories: ChatCategory[] = [];
 
         const processData = () => {
-            if (!combinedCategories.length || !combinedChannels.length) return;
-
              // --- Categories Logic ---
             let allCategories = [supportCategory, ...combinedCategories];
 
-            const userHasOpenTickets = combinedChannels.some(c => c.categoryId === TICKETS_CATEGORY_ID && (userProfile?.isAdmin || c.allowedUsers?.includes(userProfile?.uid || '')));
+            const userHasOpenTickets = combinedChannels.some(c => c.categoryId === TICKETS_CATEGORY_ID && !c.isClosed && (userProfile?.isAdmin || c.allowedUsers?.includes(userProfile?.uid || '')));
             const userHasClosedTickets = combinedChannels.some(c => c.categoryId === TICKETS_ARCHIVED_CATEGORY_ID && (userProfile?.isAdmin || c.allowedUsers?.includes(userProfile?.uid || '')));
+            const userHasSalesTickets = combinedChannels.some(c => c.categoryId === SALES_CONSULTATION_CATEGORY_ID && !c.isClosed && (userProfile?.isAdmin || c.allowedUsers?.includes(userProfile?.uid || '')));
 
             const ticketsCategoryExists = allCategories.some(c => c.id === TICKETS_CATEGORY_ID);
             const archivedCategoryExists = allCategories.some(c => c.id === TICKETS_ARCHIVED_CATEGORY_ID);
+            const salesCategoryExists = allCategories.some(c => c.id === SALES_CONSULTATION_CATEGORY_ID);
 
+             if ((userProfile?.isAdmin || userHasSalesTickets) && !salesCategoryExists) {
+                allCategories.splice(1, 0, {
+                    id: SALES_CONSULTATION_CATEGORY_ID, name: 'Consultas de Venda', order: -0.5, createdAt: new Timestamp(0,0), allowedRanks: []
+                });
+             }
 
             if ((userProfile?.isAdmin || userHasOpenTickets) && !ticketsCategoryExists) {
                 allCategories.splice(1, 0, {
-                    id: TICKETS_CATEGORY_ID, name: 'Tickets', order: 0, createdAt: new Timestamp(0, 0), allowedRanks: [] // No rank restriction!
+                    id: TICKETS_CATEGORY_ID, name: 'Tickets', order: 0, createdAt: new Timestamp(0, 0), allowedRanks: []
                 });
             }
              if ((userProfile?.isAdmin || userHasClosedTickets) && !archivedCategoryExists) {
                 allCategories.push({
-                    id: TICKETS_ARCHIVED_CATEGORY_ID, name: 'Tickets Finalizados', order: 99, createdAt: new Timestamp(0,0), allowedRanks: [] // No rank restriction!
+                    id: TICKETS_ARCHIVED_CATEGORY_ID, name: 'Tickets Finalizados', order: 99, createdAt: new Timestamp(0,0), allowedRanks: []
                 });
              }
              
@@ -238,6 +247,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
 
             const visibleCategories = allCategories.filter(cat => {
                  if (userProfile?.isAdmin) return true;
+                 if (cat.id === SALES_CONSULTATION_CATEGORY_ID && userHasSalesTickets) return true;
                  if (cat.id === TICKETS_CATEGORY_ID && userHasOpenTickets) return true;
                  if (cat.id === TICKETS_ARCHIVED_CATEGORY_ID && userHasClosedTickets) return true;
                  if (!cat.allowedRanks || cat.allowedRanks.length === 0) return true;
@@ -259,9 +269,13 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             setChannels(allVisibleChannels);
             
             // Set active channel logic
-            if (allVisibleChannels.length > 0 && (!activeChannel || !allVisibleChannels.some(c => c.id === activeChannel.id))) {
-                setActiveChannel(supportChannel);
+            const currentActive = allVisibleChannels.find(c => c.id === activeChannelId);
+            if(currentActive) {
+                setActiveChannel(currentActive);
+            } else if (allVisibleChannels.length > 0) {
+                setActiveChannelId(supportChannel.id);
             }
+
             setIsLoading(false);
         };
 
@@ -289,7 +303,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             unsubChannels();
         };
 
-    }, [userProfile?.uid, userProfile?.isAdmin, userProfile?.rank, toast]);
+    }, [userProfile?.uid, userProfile?.isAdmin, userProfile?.rank, toast, activeChannelId, setActiveChannelId]);
 
 
   // Firestore listener for messages
@@ -351,12 +365,11 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
         setIsCreatingTicket(true);
         try {
             // Check if user already has an open ticket to prevent spam
-            const ticketsQuery = query(collection(db, 'chatChannels'), where('isPrivate', '==', true), where('allowedUsers', 'array-contains', userProfile.uid), where('isClosed', '!=', true));
+            const ticketsQuery = query(collection(db, 'chatChannels'), where('isPrivate', '==', true), where('categoryId', '==', TICKETS_CATEGORY_ID), where('allowedUsers', 'array-contains', userProfile.uid), where('isClosed', '!=', true));
             const existingTickets = await getDocs(ticketsQuery);
             if (!existingTickets.empty) {
-                toast({ title: "Ticket Existente", description: "Você já possui um ticket aberto.", variant: "default", className: "bg-yellow-500 border-yellow-500 text-black" });
-                const existingTicketChannel = { id: existingTickets.docs[0].id, ...existingTickets.docs[0].data() } as ChatChannel;
-                setActiveChannel(existingTicketChannel);
+                toast({ title: "Ticket Existente", description: "Você já possui um ticket de suporte aberto.", variant: "default", className: "bg-yellow-500 border-yellow-500 text-black" });
+                setActiveChannelId(existingTickets.docs[0].id);
                 return;
             }
 
@@ -386,12 +399,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
             
             // The real-time listener will automatically add the channel to the UI for everyone.
             // We just need to set it as active for the current user.
-            const newChannelForState: ChatChannel = {
-                id: newChannelRef.id,
-                ...newChannelData,
-                createdAt: new Timestamp(Date.now() / 1000, 0) // Use a client-side timestamp for immediate state update
-            };
-            setActiveChannel(newChannelForState);
+            setActiveChannelId(newChannelRef.id);
 
 
         } catch (error) {
@@ -438,8 +446,8 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
     }
   };
 
-    const handleChannelClick = (channel: ChatChannel) => {
-        setActiveChannel(channel);
+    const handleChannelClick = (channelId: string) => {
+        setActiveChannelId(channelId);
     };
 
     const handleReplyClick = (message: ChatMessage) => {
@@ -588,7 +596,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                 if (action === 'delete') {
                     // TODO: Also delete all messages within the channel in a batch
                     await deleteDoc(doc(db, 'chatChannels', channel.id));
-                    if (activeChannel?.id === channel.id) { setActiveChannel(supportChannel); }
+                    if (activeChannel?.id === channel.id) { setActiveChannelId(supportChannel.id); }
                     toast({ title: "Canal Excluído", description: `O canal #${channel.name} foi removido.` });
                 } else if (action === 'close') {
                     const channelRef = doc(db, 'chatChannels', channel.id);
@@ -604,7 +612,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                         isBotMessage: true,
                      });
                     toast({ title: "Ticket Encerrado", description: `O ticket foi finalizado e arquivado.` });
-                    setActiveChannel(supportChannel);
+                    setActiveChannelId(supportChannel.id);
                 }
 
             } else if (type === 'category') {
@@ -616,7 +624,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                     // TODO: Also delete all messages within each channel
                     batch.delete(doc(db, 'chatChannels', c.id));
                      if (activeChannel?.categoryId === c.categoryId) {
-                        setActiveChannel(supportChannel);
+                        setActiveChannelId(supportChannel.id);
                     }
                 });
 
@@ -708,7 +716,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                 {categories.map(category => (
                     <AccordionItem value={category.id} key={category.id} className="border-b-0 group/category">
                         <ContextMenu>
-                            <ContextMenuTrigger disabled={!userProfile?.isAdmin || [SUPPORT_CATEGORY_ID, TICKETS_CATEGORY_ID, TICKETS_ARCHIVED_CATEGORY_ID].includes(category.id)}>
+                            <ContextMenuTrigger disabled={!userProfile?.isAdmin || [SUPPORT_CATEGORY_ID, TICKETS_CATEGORY_ID, TICKETS_ARCHIVED_CATEGORY_ID, SALES_CONSULTATION_CATEGORY_ID].includes(category.id)}>
                                 <div className="flex items-center justify-between group">
                                         <AccordionTrigger className="flex-1 text-xs font-semibold uppercase text-muted-foreground hover:text-foreground py-1 px-2 rounded-md">
                                             {category.name}
@@ -727,7 +735,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                                         <ContextMenuTrigger disabled={!userProfile?.isAdmin || channel.id === SUPPORT_CHANNEL_ID || channel.isClosed}>
                                             <Button
                                                 variant="ghost"
-                                                onClick={() => handleChannelClick(channel)}
+                                                onClick={() => handleChannelClick(channel.id)}
                                                 className={cn(
                                                     'w-full justify-start text-muted-foreground',
                                                     activeChannel?.id === channel.id && 'bg-accent text-accent-foreground'
@@ -1007,7 +1015,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                                 <SelectValue placeholder="Selecione uma categoria" />
                             </SelectTrigger>
                             <SelectContent>
-                                {categories.filter(c => ![SUPPORT_CATEGORY_ID, TICKETS_CATEGORY_ID, TICKETS_ARCHIVED_CATEGORY_ID].includes(c.id)).map(category => (
+                                {categories.filter(c => ![SUPPORT_CATEGORY_ID, TICKETS_CATEGORY_ID, TICKETS_ARCHIVED_CATEGORY_ID, SALES_CONSULTATION_CATEGORY_ID].includes(c.id)).map(category => (
                                     <SelectItem key={category.id} value={category.id}>
                                         {category.name}
                                     </SelectItem>
