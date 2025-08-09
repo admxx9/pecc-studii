@@ -268,47 +268,59 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
     
     // Derived state for visible categories and channels
     const { visibleCategories, visibleChannels } = useMemo(() => {
-        const userHasChannelInCategory = (categoryId: string) => 
+        if (!userProfile) return { visibleCategories: [], visibleChannels: [] };
+        
+        const hasChannelInCategory = (categoryId: string) => 
             channels.some(c => 
                 c.categoryId === categoryId && 
-                (userProfile?.isAdmin || c.allowedUsers?.includes(userProfile.uid))
+                (userProfile.isAdmin || c.allowedUsers?.includes(userProfile.uid))
             );
 
-        let dynamicCategories: ChatCategory[] = [];
-        if (userProfile?.isAdmin || userHasChannelInCategory(SALES_CONSULTATION_CATEGORY_ID)) {
+        let dynamicCategories = [];
+        const hasOpenTicket = hasChannelInCategory(TICKETS_CATEGORY_ID);
+
+        // Logic for dynamic categories
+        if (hasChannelInCategory(SALES_CONSULTATION_CATEGORY_ID) || userProfile.isAdmin) {
              dynamicCategories.push({ id: SALES_CONSULTATION_CATEGORY_ID, name: 'Consultas de Venda', order: -8, createdAt: new Timestamp(0,0), allowedRanks: [] });
         }
-        if (userProfile?.isAdmin || userHasChannelInCategory(TICKETS_CATEGORY_ID)) {
+        if (hasOpenTicket || userProfile.isAdmin) {
             dynamicCategories.push({ id: TICKETS_CATEGORY_ID, name: 'Tickets', order: -7, createdAt: new Timestamp(0, 0), allowedRanks: [] });
         }
-        if (userProfile?.isAdmin || userHasChannelInCategory(TICKETS_ARCHIVED_CATEGORY_ID)) {
+        if (hasChannelInCategory(TICKETS_ARCHIVED_CATEGORY_ID) || userProfile.isAdmin) {
             dynamicCategories.push({ id: TICKETS_ARCHIVED_CATEGORY_ID, name: 'Tickets Finalizados', order: 99, createdAt: new Timestamp(0,0), allowedRanks: [] });
         }
+        
+        const staticCategories = [serverInfoCategory];
+        // Only show the main "Suporte" category if the user has no open tickets and is not an admin viewing all tickets
+        if (!hasOpenTicket || userProfile.isAdmin) {
+             staticCategories.push(supportCategory);
+        }
 
-        const allDbCategories = [serverInfoCategory, supportCategory, ...categories, ...dynamicCategories];
+        const allDbCategories = [...staticCategories, ...categories, ...dynamicCategories];
 
-        const visibleCategories = allDbCategories.filter(cat => {
-            if (userProfile?.isAdmin) return true;
-            if ([SERVER_INFO_CATEGORY_ID, SUPPORT_CATEGORY_ID, TICKETS_CATEGORY_ID, SALES_CONSULTATION_CATEGORY_ID, TICKETS_ARCHIVED_CATEGORY_ID].includes(cat.id)) {
-                 return true; // The dynamic logic above already filtered these
-            }
+        const finalVisibleCategories = allDbCategories.filter(cat => {
+            if (userProfile.isAdmin) return true;
+            // Hide support category if there is an open ticket for non-admins
+            if (cat.id === SUPPORT_CATEGORY_ID && hasOpenTicket) return false;
+            // Public categories
             if (!cat.allowedRanks || cat.allowedRanks.length === 0) return true;
-            return cat.allowedRanks.includes(userProfile?.rank || '');
+            // Rank-restricted categories
+            return cat.allowedRanks.includes(userProfile.rank || '');
         }).sort((a,b) => a.order - b.order);
 
-        const visibleCategoryIds = new Set(visibleCategories.map(c => c.id));
+        const visibleCategoryIds = new Set(finalVisibleCategories.map(c => c.id));
         
         const allPossibleChannels = [serverInfoChannel, supportChannel, ...channels];
 
-        const visibleChannels = allPossibleChannels.filter(channel => {
+        const finalVisibleChannels = allPossibleChannels.filter(channel => {
             if (!visibleCategoryIds.has(channel.categoryId)) return false;
             if (channel.isPrivate) {
-                return userProfile?.isAdmin || channel.allowedUsers?.includes(userProfile.uid);
+                return userProfile.isAdmin || channel.allowedUsers?.includes(userProfile.uid);
             }
             return true;
         });
         
-        return { visibleCategories, visibleChannels };
+        return { visibleCategories: finalVisibleCategories, visibleChannels: finalVisibleChannels };
 
     }, [channels, categories, userProfile]);
 
@@ -1147,4 +1159,5 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
     </div>
   );
 }
+
 
