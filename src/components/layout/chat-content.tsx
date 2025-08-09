@@ -217,10 +217,15 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
         const processData = () => {
              // --- Categories Logic ---
             let allCategories = [supportCategory, ...combinedCategories];
+            
+            const userHasAccessToCategory = (categoryId: string) => {
+                 return combinedChannels.some(c => c.categoryId === categoryId && (userProfile?.isAdmin || c.allowedUsers?.includes(userProfile?.uid || '')));
+            };
 
-            const userHasOpenTickets = combinedChannels.some(c => c.categoryId === TICKETS_CATEGORY_ID && !c.isClosed && (userProfile?.isAdmin || c.allowedUsers?.includes(userProfile?.uid || '')));
-            const userHasClosedTickets = combinedChannels.some(c => c.categoryId === TICKETS_ARCHIVED_CATEGORY_ID && (userProfile?.isAdmin || c.allowedUsers?.includes(userProfile?.uid || '')));
-            const userHasSalesTickets = combinedChannels.some(c => c.categoryId === SALES_CONSULTATION_CATEGORY_ID && !c.isClosed && (userProfile?.isAdmin || c.allowedUsers?.includes(userProfile?.uid || '')));
+            const userHasOpenTickets = userHasAccessToCategory(TICKETS_CATEGORY_ID);
+            const userHasClosedTickets = userHasAccessToCategory(TICKETS_ARCHIVED_CATEGORY_ID);
+            const userHasSalesTickets = userHasAccessToCategory(SALES_CONSULTATION_CATEGORY_ID);
+
 
             const ticketsCategoryExists = allCategories.some(c => c.id === TICKETS_CATEGORY_ID);
             const archivedCategoryExists = allCategories.some(c => c.id === TICKETS_ARCHIVED_CATEGORY_ID);
@@ -247,9 +252,9 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
 
             const visibleCategories = allCategories.filter(cat => {
                  if (userProfile?.isAdmin) return true;
-                 if (cat.id === SALES_CONSULTATION_CATEGORY_ID && userHasSalesTickets) return true;
-                 if (cat.id === TICKETS_CATEGORY_ID && userHasOpenTickets) return true;
-                 if (cat.id === TICKETS_ARCHIVED_CATEGORY_ID && userHasClosedTickets) return true;
+                 if (cat.id === SALES_CONSULTATION_CATEGORY_ID) return userHasSalesTickets;
+                 if (cat.id === TICKETS_CATEGORY_ID) return userHasOpenTickets;
+                 if (cat.id === TICKETS_ARCHIVED_CATEGORY_ID) return userHasClosedTickets;
                  if (!cat.allowedRanks || cat.allowedRanks.length === 0) return true;
                  return cat.allowedRanks.includes(userProfile?.rank || '');
              });
@@ -1118,3 +1123,5 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
     </div>
   );
 }
+
+    
