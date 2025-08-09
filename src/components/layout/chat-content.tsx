@@ -45,7 +45,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { UserProfile } from '@/components/page/home-client-page';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, Timestamp, doc, deleteDoc, updateDoc, arrayUnion, arrayRemove, getDoc, writeBatch, where, getDocs, setDoc, Unsubscribe } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, Timestamp, doc, deleteDoc, updateDoc, arrayUnion, arrayRemove, getDoc, writeBatch, where, getDocs, setDoc, Unsubscribe, or } from 'firebase/firestore';
 import { useToast } from "@/hooks/use-toast";
 import { ranks, rankKeys, rankIcons } from '@/config/ranks';
 
@@ -236,12 +236,23 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
 
     // Set up real-time listeners for categories and channels
     useEffect(() => {
-        if (!db) return;
+        if (!db || !userProfile) return;
         setIsLoading(true);
-
+    
         const categoriesQuery = query(collection(db, 'chatCategories'), orderBy('order', 'asc'));
-        const channelsQuery = query(collection(db, 'chatChannels'), orderBy('createdAt', 'asc'));
-
+    
+        // Construct a query for channels relevant to the user
+        const channelsCol = collection(db, 'chatChannels');
+        const channelsQuery = userProfile.isAdmin
+          ? query(channelsCol, orderBy('createdAt', 'asc')) // Admin sees all channels
+          : query(channelsCol, 
+              or(
+                  where('isPrivate', '!=', true), // All public channels
+                  where('allowedUsers', 'array-contains', userProfile.uid) // Private channels they are in
+              ),
+              orderBy('createdAt', 'asc')
+            );
+    
         const unsubCategories = onSnapshot(categoriesQuery, (snapshot) => {
             const fetchedCategories = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatCategory[];
             setCategories(fetchedCategories);
@@ -249,7 +260,7 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
             console.error("Error fetching categories:", error);
             toast({ title: "Erro", description: "Não foi possível carregar as categorias.", variant: "destructive" });
         });
-
+    
         const unsubChannels = onSnapshot(channelsQuery, (snapshot) => {
             const fetchedChannels = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ChatChannel[];
             setChannels(fetchedChannels);
@@ -259,58 +270,69 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
             toast({ title: "Erro", description: "Não foi possível carregar os canais.", variant: "destructive" });
             setIsLoading(false);
         });
-
+    
         return () => {
             unsubCategories();
             unsubChannels();
         };
-    }, [toast]);
+    }, [toast, userProfile]);
     
     // Derived state for visible categories and channels
     const { visibleCategories, visibleChannels } = useMemo(() => {
         if (!userProfile) return { visibleCategories: [], visibleChannels: [] };
         
-        const allPossibleChannels = [serverInfoChannel, supportChannel, ...channels];
-
-        // 1. First, determine all channels visible to the current user
-        const finalVisibleChannels = allPossibleChannels.filter(channel => {
+        // 1. Filter all available channels (from state) to what the user can see based on category rank permissions.
+        const rankFilteredChannels = [serverInfoChannel, supportChannel, ...channels].filter(channel => {
+            // Admins see everything.
             if (userProfile.isAdmin) return true;
+    
+            // Private channels (tickets, consultations) are governed by `allowedUsers`, not ranks.
             if (channel.isPrivate) return channel.allowedUsers?.includes(userProfile.uid);
             
-            // For non-private channels, check category permissions
+            // For public channels, check the parent category's allowed ranks.
             const parentCategory = categories.find(c => c.id === channel.categoryId);
-            if(parentCategory?.allowedRanks && parentCategory.allowedRanks.length > 0) {
+            if (!parentCategory) return true; // If no category found (like for static channels), it's public.
+            
+            // If ranks are defined, user must have one of them. If empty, it's public.
+            if (parentCategory.allowedRanks && parentCategory.allowedRanks.length > 0) {
                  return parentCategory.allowedRanks.includes(userProfile.rank || '');
             }
-            return true; // Public channel in a public category
+            return true;
         });
 
-        // 2. Determine if the user has any open tickets
-        const hasOpenTicket = finalVisibleChannels.some(c => c.categoryId === TICKETS_CATEGORY_ID);
+        // 2. Determine which dynamic categories should be shown based on visible channels.
+        const userHasOpenTicket = rankFilteredChannels.some(c => c.categoryId === TICKETS_CATEGORY_ID);
+        const userHasSalesConsultation = rankFilteredChannels.some(c => c.categoryId === SALES_CONSULTATION_CATEGORY_ID);
+        const userHasArchivedTicket = rankFilteredChannels.some(c => c.categoryId === TICKETS_ARCHIVED_CATEGORY_ID);
 
-        // 3. Now, determine all categories that should be visible
-        const visibleCategoryIds = new Set(finalVisibleChannels.map(c => c.categoryId));
+
+        // 3. Now, build the final list of visible categories.
+        const finalCategoryIds = new Set(rankFilteredChannels.map(c => c.categoryId));
+
+        // Always show the server info category.
+        finalCategoryIds.add(SERVER_INFO_CATEGORY_ID);
         
-        // Always add static categories that are always present
-        visibleCategoryIds.add(SERVER_INFO_CATEGORY_ID);
-
-        // Add support category only if the user has NO open tickets.
-        if (!hasOpenTicket) {
-             visibleCategoryIds.add(SUPPORT_CATEGORY_ID);
+        // Show the support category only if the user has NO open tickets.
+        if (!userHasOpenTicket) {
+             finalCategoryIds.add(SUPPORT_CATEGORY_ID);
         }
 
-        let dynamicCategories = [
+        // The dynamic categories were already added to the set if they contained channels.
+        // Now we just filter the main list.
+        const allPossibleCategories = [
+             serverInfoCategory, 
+             supportCategory, 
+             ...categories, 
              { id: SALES_CONSULTATION_CATEGORY_ID, name: 'Consultas de Venda', order: -8, createdAt: new Timestamp(0,0), allowedRanks: [] },
              { id: TICKETS_CATEGORY_ID, name: 'Tickets', order: -7, createdAt: new Timestamp(0, 0), allowedRanks: [] },
              { id: TICKETS_ARCHIVED_CATEGORY_ID, name: 'Tickets Finalizados', order: 99, createdAt: new Timestamp(0,0), allowedRanks: [] }
         ];
 
-        const allPossibleCategories = [...categories, serverInfoCategory, supportCategory, ...dynamicCategories];
+        const finalVisibleCategories = allPossibleCategories
+            .filter(cat => finalCategoryIds.has(cat.id))
+            .sort((a,b) => a.order - b.order);
 
-        const finalVisibleCategories = allPossibleCategories.filter(cat => visibleCategoryIds.has(cat.id))
-                                                           .sort((a,b) => a.order - b.order);
-
-        return { visibleCategories: finalVisibleCategories, visibleChannels: finalVisibleChannels };
+        return { visibleCategories: finalVisibleCategories, visibleChannels: rankFilteredChannels };
 
     }, [channels, categories, userProfile]);
 
@@ -1149,6 +1171,3 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
     </div>
   );
 }
-
-
-
