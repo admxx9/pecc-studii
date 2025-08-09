@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Hash, Send, UserCircle, MessageSquareReply, Smile, MoreHorizontal, Loader2, X, Trash2, Copy as CopyIcon, Settings, Plus, GripVertical, Edit, Lock, Ticket as TicketIcon, Crown } from 'lucide-react';
+import { Hash, Send, UserCircle, MessageSquareReply, Smile, MoreHorizontal, Loader2, X, Trash2, Copy as CopyIcon, Settings, Plus, GripVertical, Edit, Lock, Ticket as TicketIcon, Crown, BookOpen } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogClose, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -100,16 +100,62 @@ interface ChatContentProps {
 
 const EMOJI_LIST = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🤔'];
 
-// Static Support Channel & Category IDs
+// Static Category & Channel IDs
+const SERVER_INFO_CATEGORY_ID = 'server-info-category';
+const SERVER_INFO_CHANNEL_ID = 'server-info-channel';
 const SUPPORT_CATEGORY_ID = 'support-category';
 const SUPPORT_CHANNEL_ID = 'support-channel';
 const TICKETS_CATEGORY_ID = 'tickets-category';
-const TICKETS_ARCHIVED_CATEGORY_ID = 'tickets-archived-category';
 const SALES_CONSULTATION_CATEGORY_ID = 'sales-consultation-category';
+const TICKETS_ARCHIVED_CATEGORY_ID = 'tickets-archived-category';
 
 
-// Static Support Content
-const botMessage: ChatMessage = {
+// --- Static Content ---
+
+// Server Info Category & Channel
+const serverInfoCategory: ChatCategory = {
+  id: SERVER_INFO_CATEGORY_ID,
+  name: 'Servidor',
+  order: -10, // The very first category
+  createdAt: new Timestamp(0, 0),
+  allowedRanks: [], // Public
+};
+const serverInfoChannel: ChatChannel = {
+  id: SERVER_INFO_CHANNEL_ID,
+  name: 'nosso-proposito',
+  categoryId: SERVER_INFO_CATEGORY_ID,
+  createdAt: new Timestamp(0, 0),
+};
+const serverInfoMessage: ChatMessage = {
+    id: 'server-info-message',
+    text: 'Bem-vindo ao STUDIO PECC! Nossa missão é fornecer as melhores ferramentas, aulas e suporte para a comunidade de modding. Explore os canais para aprender, baixar ferramentas e interagir com outros modders. Se precisar de ajuda, vá até o canal de suporte!',
+    user: {
+        uid: 'bot',
+        name: 'STUDIO PECC',
+        avatar: 'https://i.imgur.com/sXliRZl.png',
+        rank: 'admin',
+        isAdmin: true,
+    },
+    createdAt: new Timestamp(new Date().getTime() / 1000, 0),
+    isBotMessage: true,
+};
+
+
+// Support Category & Channel
+const supportCategory: ChatCategory = {
+  id: SUPPORT_CATEGORY_ID,
+  name: 'Suporte',
+  order: -9, // Second category
+  createdAt: new Timestamp(0, 0),
+  allowedRanks: [], // Public
+};
+const supportChannel: ChatChannel = {
+  id: SUPPORT_CHANNEL_ID,
+  name: 'suporte',
+  categoryId: SUPPORT_CATEGORY_ID,
+  createdAt: new Timestamp(0, 0),
+};
+const supportBotMessage: ChatMessage = {
     id: 'bot-message-1',
     text: 'Bem-vindo ao canal de suporte! Se precisar de ajuda, clique no botão abaixo para abrir um ticket privado e nossa equipe irá atendê-lo.',
     user: {
@@ -122,21 +168,6 @@ const botMessage: ChatMessage = {
     createdAt: new Timestamp(new Date().getTime() / 1000, 0),
     isBotMessage: true,
     actions: [{ text: 'Abrir Ticket', actionId: 'create-ticket' }],
-};
-
-const supportCategory: ChatCategory = {
-  id: SUPPORT_CATEGORY_ID,
-  name: 'Suporte',
-  order: -1, // Ensures it's always at the top
-  createdAt: new Timestamp(0, 0),
-  allowedRanks: [], // Public
-};
-
-const supportChannel: ChatChannel = {
-  id: SUPPORT_CHANNEL_ID,
-  name: 'suporte',
-  categoryId: SUPPORT_CATEGORY_ID,
-  createdAt: new Timestamp(0, 0),
 };
 
 
@@ -237,29 +268,28 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
     
     // Derived state for visible categories and channels
     const { visibleCategories, visibleChannels } = useMemo(() => {
-        const hasTicketIn = (categoryId: string) => 
-            channels.some(c => c.categoryId === categoryId && (userProfile?.isAdmin || c.allowedUsers?.includes(userProfile.uid)));
-
-        const userHasOpenTickets = hasTicketIn(TICKETS_CATEGORY_ID);
-        const userHasClosedTickets = hasTicketIn(TICKETS_ARCHIVED_CATEGORY_ID);
-        const userHasSalesTickets = hasTicketIn(SALES_CONSULTATION_CATEGORY_ID);
+        const userHasChannelInCategory = (categoryId: string) => 
+            channels.some(c => 
+                c.categoryId === categoryId && 
+                (userProfile?.isAdmin || c.allowedUsers?.includes(userProfile.uid))
+            );
 
         let dynamicCategories: ChatCategory[] = [];
-        if (userHasSalesTickets || userProfile?.isAdmin) {
-             dynamicCategories.push({ id: SALES_CONSULTATION_CATEGORY_ID, name: 'Consultas de Venda', order: -0.5, createdAt: new Timestamp(0,0), allowedRanks: [] });
+        if (userProfile?.isAdmin || userHasChannelInCategory(SALES_CONSULTATION_CATEGORY_ID)) {
+             dynamicCategories.push({ id: SALES_CONSULTATION_CATEGORY_ID, name: 'Consultas de Venda', order: -8, createdAt: new Timestamp(0,0), allowedRanks: [] });
         }
-        if (userHasOpenTickets || userProfile?.isAdmin) {
-            dynamicCategories.push({ id: TICKETS_CATEGORY_ID, name: 'Tickets', order: 0, createdAt: new Timestamp(0, 0), allowedRanks: [] });
+        if (userProfile?.isAdmin || userHasChannelInCategory(TICKETS_CATEGORY_ID)) {
+            dynamicCategories.push({ id: TICKETS_CATEGORY_ID, name: 'Tickets', order: -7, createdAt: new Timestamp(0, 0), allowedRanks: [] });
         }
-         if (userHasClosedTickets || userProfile?.isAdmin) {
+        if (userProfile?.isAdmin || userHasChannelInCategory(TICKETS_ARCHIVED_CATEGORY_ID)) {
             dynamicCategories.push({ id: TICKETS_ARCHIVED_CATEGORY_ID, name: 'Tickets Finalizados', order: 99, createdAt: new Timestamp(0,0), allowedRanks: [] });
         }
 
-        const allDbCategories = [supportCategory, ...categories, ...dynamicCategories];
+        const allDbCategories = [serverInfoCategory, supportCategory, ...categories, ...dynamicCategories];
 
         const visibleCategories = allDbCategories.filter(cat => {
             if (userProfile?.isAdmin) return true;
-            if ([SUPPORT_CATEGORY_ID, TICKETS_CATEGORY_ID, TICKETS_ARCHIVED_CATEGORY_ID, SALES_CONSULTATION_CATEGORY_ID].includes(cat.id)) {
+            if ([SERVER_INFO_CATEGORY_ID, SUPPORT_CATEGORY_ID, TICKETS_CATEGORY_ID, SALES_CONSULTATION_CATEGORY_ID, TICKETS_ARCHIVED_CATEGORY_ID].includes(cat.id)) {
                  return true; // The dynamic logic above already filtered these
             }
             if (!cat.allowedRanks || cat.allowedRanks.length === 0) return true;
@@ -268,7 +298,7 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
 
         const visibleCategoryIds = new Set(visibleCategories.map(c => c.id));
         
-        const allPossibleChannels = [supportChannel, ...channels];
+        const allPossibleChannels = [serverInfoChannel, supportChannel, ...channels];
 
         const visibleChannels = allPossibleChannels.filter(channel => {
             if (!visibleCategoryIds.has(channel.categoryId)) return false;
@@ -291,9 +321,9 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
         if (currentActiveChannel) {
             setActiveChannel(currentActiveChannel);
         } else if (visibleChannels.length > 0) {
-            // Default to support channel if the active one is no longer visible
-            setActiveChannelId(supportChannel.id);
-            setActiveChannel(supportChannel);
+            // Default to server info channel if the active one is no longer visible
+            setActiveChannelId(serverInfoChannel.id);
+            setActiveChannel(serverInfoChannel);
         } else {
              setActiveChannel(null);
         }
@@ -303,8 +333,12 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
 
   // Firestore listener for messages
   useEffect(() => {
-     if (activeChannel?.id === SUPPORT_CHANNEL_ID) {
-        setMessages([botMessage]);
+    if (activeChannel?.id === SUPPORT_CHANNEL_ID) {
+        setMessages([supportBotMessage]);
+        return;
+    }
+     if (activeChannel?.id === SERVER_INFO_CHANNEL_ID) {
+        setMessages([serverInfoMessage]);
         return;
     }
     if (!db || !activeChannel) {
@@ -407,7 +441,7 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newMessage.trim() === '' || !userProfile || !db || !activeChannel || activeChannel.id === SUPPORT_CHANNEL_ID) return;
+    if (newMessage.trim() === '' || !userProfile || !db || !activeChannel || activeChannel.id === SUPPORT_CHANNEL_ID || activeChannel.id === SERVER_INFO_CHANNEL_ID) return;
      if (activeChannel.isClosed) {
         toast({ title: "Ticket Fechado", description: "Não é possível enviar mensagens em um ticket finalizado.", variant: "destructive"});
         return;
@@ -454,7 +488,7 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
     const cancelReply = () => setReplyingTo(null);
 
     const handleDeleteMessage = async (messageId: string) => {
-        if (!db || !activeChannel || activeChannel.id === SUPPORT_CHANNEL_ID) return;
+        if (!db || !activeChannel || activeChannel.id === SUPPORT_CHANNEL_ID || activeChannel.id === SERVER_INFO_CHANNEL_ID) return;
         const isOwner = messages.find(m => m.id === messageId)?.user.uid === userProfile?.uid;
         if (!isOwner && !userProfile?.isAdmin) {
             toast({ title: "Acesso Negado", description: "Você não tem permissão para excluir esta mensagem.", variant: "destructive" });
@@ -711,7 +745,7 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
                 {visibleCategories.map(category => (
                     <AccordionItem value={category.id} key={category.id} className="border-b-0 group/category">
                         <ContextMenu>
-                            <ContextMenuTrigger disabled={!userProfile?.isAdmin || [SUPPORT_CATEGORY_ID, TICKETS_CATEGORY_ID, TICKETS_ARCHIVED_CATEGORY_ID, SALES_CONSULTATION_CATEGORY_ID].includes(category.id)}>
+                            <ContextMenuTrigger disabled={!userProfile?.isAdmin || [SERVER_INFO_CATEGORY_ID, SUPPORT_CATEGORY_ID, TICKETS_CATEGORY_ID, SALES_CONSULTATION_CATEGORY_ID, TICKETS_ARCHIVED_CATEGORY_ID].includes(category.id)}>
                                 <div className="flex items-center justify-between group">
                                         <AccordionTrigger className="flex-1 text-xs font-semibold uppercase text-muted-foreground hover:text-foreground py-1 px-2 rounded-md">
                                             {category.name}
@@ -727,7 +761,7 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
                             <nav className="space-y-1">
                                 {visibleChannels.filter(c => c.categoryId === category.id).map(channel => (
                                     <ContextMenu key={channel.id}>
-                                        <ContextMenuTrigger disabled={!userProfile?.isAdmin || channel.id === SUPPORT_CHANNEL_ID || channel.isClosed}>
+                                        <ContextMenuTrigger disabled={!userProfile?.isAdmin || [SERVER_INFO_CHANNEL_ID, SUPPORT_CHANNEL_ID].includes(channel.id) || channel.isClosed}>
                                             <Button
                                                 variant="ghost"
                                                 onClick={() => handleChannelClick(channel.id)}
@@ -736,13 +770,13 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
                                                     activeChannel?.id === channel.id && 'bg-accent text-accent-foreground'
                                                 )}
                                             >
-                                                {channel.isPrivate ? <Lock className="mr-2 h-4 w-4" /> : <Hash className="mr-2 h-4 w-4" />}
+                                                {channel.isPrivate ? <Lock className="mr-2 h-4 w-4" /> : channel.categoryId === SERVER_INFO_CATEGORY_ID ? <BookOpen className="mr-2 h-4 w-4" /> : <Hash className="mr-2 h-4 w-4" />}
                                                 <span className="truncate">{channel.name}</span>
                                             </Button>
                                         </ContextMenuTrigger>
                                         <ContextMenuContent>
                                             <ContextMenuItem onSelect={() => handleOpenChannelModal(channel.categoryId, channel)}>Editar Canal</ContextMenuItem>
-                                             {channel.id !== SUPPORT_CHANNEL_ID && (
+                                             {![SUPPORT_CHANNEL_ID, SERVER_INFO_CHANNEL_ID].includes(channel.id) && (
                                                 <ContextMenuItem onSelect={() => setItemToManage({ type: 'channel', action: 'delete', item: channel })} className="text-destructive">Excluir Canal</ContextMenuItem>
                                              )}
                                         </ContextMenuContent>
@@ -761,7 +795,7 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Chat Header */}
         <header className="flex items-center h-14 border-b border-border px-4 flex-shrink-0">
-          {activeChannel?.isPrivate ? <Lock className="h-5 w-5 text-muted-foreground" /> : <Hash className="h-5 w-5 text-muted-foreground" />}
+          {activeChannel?.isPrivate ? <Lock className="h-5 w-5 text-muted-foreground" /> : activeChannel?.categoryId === SERVER_INFO_CATEGORY_ID ? <BookOpen className="h-5 w-5 text-muted-foreground" /> : <Hash className="h-5 w-5 text-muted-foreground" />}
           <h1 className="text-lg font-semibold text-foreground ml-1 truncate">
             {activeChannel?.name || 'Selecione um canal'}
           </h1>
@@ -803,7 +837,7 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
                         <MessageSquareReply className="h-12 w-12 mb-4" />
                         <p>Selecione um canal para começar a conversar.</p>
                      </div>
-                  ) : messages.length === 0 && activeChannel.id !== SUPPORT_CHANNEL_ID ? (
+                  ) : messages.length === 0 && ![SUPPORT_CHANNEL_ID, SERVER_INFO_CHANNEL_ID].includes(activeChannel.id) ? (
                       <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                           <p className="text-sm">Seja o primeiro a enviar uma mensagem em #{activeChannel.name}!</p>
                       </div>
@@ -977,9 +1011,9 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
                   placeholder={activeChannel ? `Conversar em #${activeChannel.name}` : 'Selecione um canal para conversar'}
                   className={cn("flex-1 bg-input", replyingTo && "rounded-t-none")}
                   autoComplete="off"
-                  disabled={!userProfile || !activeChannel || activeChannel.id === SUPPORT_CHANNEL_ID || activeChannel.isClosed}
+                  disabled={!userProfile || !activeChannel || [SUPPORT_CHANNEL_ID, SERVER_INFO_CHANNEL_ID].includes(activeChannel.id) || activeChannel.isClosed}
                 />
-                <Button type="submit" size="icon" className="flex-shrink-0" disabled={!userProfile || !activeChannel || newMessage.trim() === '' || activeChannel.id === SUPPORT_CHANNEL_ID || activeChannel.isClosed}>
+                <Button type="submit" size="icon" className="flex-shrink-0" disabled={!userProfile || !activeChannel || newMessage.trim() === '' || [SUPPORT_CHANNEL_ID, SERVER_INFO_CHANNEL_ID].includes(activeChannel.id) || activeChannel.isClosed}>
                   <Send className="h-4 w-4" />
                 </Button>
             </form>
@@ -1010,7 +1044,7 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
                                 <SelectValue placeholder="Selecione uma categoria" />
                             </SelectTrigger>
                             <SelectContent>
-                                {categories.filter(c => ![SUPPORT_CATEGORY_ID, TICKETS_CATEGORY_ID, TICKETS_ARCHIVED_CATEGORY_ID, SALES_CONSULTATION_CATEGORY_ID].includes(c.id)).map(category => (
+                                {categories.filter(c => ![SERVER_INFO_CATEGORY_ID, SUPPORT_CATEGORY_ID, TICKETS_CATEGORY_ID, TICKETS_ARCHIVED_CATEGORY_ID, SALES_CONSULTATION_CATEGORY_ID].includes(c.id)).map(category => (
                                     <SelectItem key={category.id} value={category.id}>
                                         {category.name}
                                     </SelectItem>
@@ -1113,3 +1147,4 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
     </div>
   );
 }
+
