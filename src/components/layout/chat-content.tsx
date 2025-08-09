@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Hash, Send, UserCircle, MessageSquareReply, Smile, MoreHorizontal, Loader2, X, Trash2, Copy as CopyIcon, Settings, Plus, GripVertical, Edit, Lock, Ticket as TicketIcon } from 'lucide-react';
+import { Hash, Send, UserCircle, MessageSquareReply, Smile, MoreHorizontal, Loader2, X, Trash2, Copy as CopyIcon, Settings, Plus, GripVertical, Edit, Lock, Ticket as TicketIcon, Crown } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogClose, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -83,6 +83,7 @@ interface ChatMessage {
     name: string;
     avatar: string | null;
     rank?: string;
+    isAdmin?: boolean;
   };
   createdAt: Timestamp; // Using Firestore Timestamp
   replyTo?: ReplyInfo | null;
@@ -112,6 +113,7 @@ const botMessage: ChatMessage = {
         name: 'STUDIO PECC',
         avatar: 'https://i.imgur.com/sXliRZl.png',
         rank: 'admin',
+        isAdmin: true,
     },
     createdAt: new Timestamp(new Date().getTime() / 1000, 0),
     isBotMessage: true,
@@ -359,7 +361,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
 
             await addDoc(collection(newChannelRef, 'messages'), {
                  text: `Olá ${userProfile.displayName}! Descreva seu problema em detalhes e um administrador irá respondê-lo em breve. Quando o problema for resolvido, você ou um administrador podem fechar este ticket.`,
-                 user: { uid: 'bot', name: 'STUDIO PECC', avatar: 'https://i.imgur.com/sXliRZl.png', rank: 'admin' },
+                 user: { uid: 'bot', name: 'STUDIO PECC', avatar: 'https://i.imgur.com/sXliRZl.png', rank: 'admin', isAdmin: true },
                  createdAt: serverTimestamp(),
                  isBotMessage: true,
                  actions: [{ text: 'Fechar Ticket', actionId: 'close-ticket' }],
@@ -398,6 +400,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
           name: userProfile.displayName,
           avatar: userProfile.photoURL,
           rank: userProfile.rank,
+          isAdmin: userProfile.isAdmin,
         },
         createdAt: serverTimestamp(),
         replyTo: replyingTo ? {
@@ -578,7 +581,7 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                     });
                      await addDoc(collection(channelRef, 'messages'), {
                         text: `Este ticket foi encerrado e arquivado.`,
-                        user: { uid: 'bot', name: 'STUDIO PECC', avatar: 'https://i.imgur.com/sXliRZl.png', rank: 'admin' },
+                        user: { uid: 'bot', name: 'STUDIO PECC', avatar: 'https://i.imgur.com/sXliRZl.png', rank: 'admin', isAdmin: true },
                         createdAt: serverTimestamp(),
                         isBotMessage: true,
                      });
@@ -870,12 +873,19 @@ export default function ChatContent({ userProfile }: ChatContentProps) {
                                 </button>
                             )}
                             <div className="flex items-baseline gap-2">
-                               {msg.user.uid === 'bot' ? (
+                               {msg.isBotMessage ? (
                                     <div className="font-semibold text-foreground flex items-center gap-1.5">
                                       <Badge className="bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5">BOT</Badge>
                                        {msg.user.name}
                                     </div>
-                                ) : (
+                                ) : msg.user.isAdmin ? (
+                                     <div className="font-semibold text-foreground flex items-center">
+                                       {msg.user.name}
+                                       <Badge variant="default" className="bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 ml-1.5">
+                                         <Crown className="w-3 h-3 mr-1" /> ADMIN
+                                       </Badge>
+                                     </div>
+                                 ) : (
                                     <div className="font-semibold text-foreground flex items-center">{msg.user.name} <RankIcon rank={msg.user.rank} /></div>
                                 )}
                                 <p className="text-xs text-muted-foreground">{formatDate(msg.createdAt)}</p>
