@@ -60,8 +60,8 @@ const avatarsByRank: { [key: string]: { id: string; url: string }[] } = {
   ],
   modder_junior: [
     { id: 'modder_junior1', url: 'https://i.imgur.com/YHKlctd.png' }, // vermelho
-    { id: 'modder_junior2', url: 'https://i.imgur.com/zzC6acG.png' }, // roxo
     { id: 'modder_junior3', url: 'https://i.imgur.com/JzCZVwr.png' }, // azul
+    { id: 'modder_junior2', url: 'https://i.imgur.com/zzC6acG.png' }, // roxo
     { id: 'modder_junior4', url: 'https://i.imgur.com/QEfDDEw.png' }, // cinza
     { id: 'modder_junior5', url: 'https://i.imgur.com/1SR35DZ.png' }, // laranja
   ],
