@@ -1017,7 +1017,7 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
                                         {/* GTA V Card */}
                                         <Card className="overflow-hidden bg-secondary">
                                             <CardHeader className="p-0">
-                                                <Image src="https://i.imgur.com/uF1pfaW.jpeg" alt="GTA V Map" width={300} height={150} className="w-full h-24 object-cover" data-ai-hint="gta5 city" />
+                                                <Image src="https://i.imgur.com/XLIbJZT.png" alt="GTA V Map" width={300} height={150} className="w-full h-24 object-cover" data-ai-hint="gta5 city" />
                                             </CardHeader>
                                             <CardContent className="p-3">
                                                 <h3 className="text-base font-semibold mb-1">Conversão de Mapa: GTA V</h3>
