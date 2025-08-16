@@ -528,17 +528,6 @@ export default function HomeClientPage() {
 
 
     if (!isLoggedIn) {
-        if (siteSettings.isMaintenanceMode) {
-            return (
-                <div className="flex flex-col justify-center items-center flex-1 flex-grow p-4">
-                    <Card className="w-full max-w-lg bg-card shadow-xl border-border rounded-lg p-8 text-center">
-                        <Wrench className="w-12 h-12 mx-auto text-primary mb-4" />
-                        <h2 className="text-2xl font-bold text-foreground mb-2">Em Manutenção</h2>
-                        <p className="text-muted-foreground">{siteSettings.maintenanceMessage}</p>
-                    </Card>
-                </div>
-            )
-        }
       return (
         // Centered Login Form Container
          <div className="flex flex-col justify-center items-center flex-1 flex-grow p-4">
@@ -915,7 +904,7 @@ export default function HomeClientPage() {
       `}</style>
 
        {/* Conditionally render Header */}
-       {isLoggedIn && (!siteSettings?.isMaintenanceMode || userProfile?.isAdmin) && (
+       {isLoggedIn && (
           <Header
             activeTab={activeTab}
             setActiveTab={setActiveTab}
