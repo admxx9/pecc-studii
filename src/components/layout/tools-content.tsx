@@ -26,7 +26,6 @@ import Image from 'next/image';
 
 interface ToolsContentProps {
   selectedCategory: string | null;
-  onCreateSalesTicket: () => void;
 }
 
 const canUserAccessTool = (
@@ -41,7 +40,7 @@ const canUserAccessTool = (
     return false;
  };
 
-export default function ToolsContent({ selectedCategory, onCreateSalesTicket }: ToolsContentProps) {
+export default function ToolsContent({ selectedCategory }: ToolsContentProps) {
     const [tools, setTools] = useState<Tool[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isNavigating, setIsNavigating] = useState<string | null>(null);
@@ -215,25 +214,6 @@ export default function ToolsContent({ selectedCategory, onCreateSalesTicket }: 
                     </CardDescription>
                      {selectedCategory === 'loja' && !isLoading && (
                         <div className="space-y-4 pt-4">
-                             {/* Sales Consultation Card */}
-                            <Card className="bg-secondary/50 border-primary/20">
-                                 <CardHeader>
-                                    <CardTitle className="text-lg flex items-center gap-2">
-                                        <Wrench className="h-5 w-5 text-primary"/>
-                                        Encomendar Conversão de Mapa
-                                    </CardTitle>
-                                    <CardDescription>
-                                        Precisa de um mapa específico como GTA V, GTA IV, ou outro? Inicie uma consulta para discutir os detalhes e o orçamento.
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                     <Button onClick={onCreateSalesTicket}>
-                                        <MessageSquarePlus className="mr-2 h-4 w-4"/>
-                                        Iniciar Consulta
-                                     </Button>
-                                </CardContent>
-                            </Card>
-
                             <div className="flex flex-col sm:flex-row gap-4">
                                 <div className="flex items-center gap-2">
                                     <ArrowUpDown className="h-4 w-4 text-muted-foreground" />

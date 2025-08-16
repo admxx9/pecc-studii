@@ -27,9 +27,11 @@ interface SettingsPanelProps {
     setSection: (section: any) => void;
 }
 
+// Updated schema to include the sales bot setting
 const settingsSchema = z.object({
     isMaintenanceMode: z.boolean().default(false),
     maintenanceMessage: z.string().min(10, { message: "A mensagem deve ter pelo menos 10 caracteres." }).max(200, { message: "A mensagem não pode exceder 200 caracteres." }),
+    isSalesBotEnabled: z.boolean().default(true), // Add the bot toggle
 });
 
 type SettingsFormData = z.infer<typeof settingsSchema>;
@@ -44,6 +46,7 @@ const SettingsPanel = ({ setSection }: SettingsPanelProps) => {
         defaultValues: {
             isMaintenanceMode: false,
             maintenanceMessage: 'O site está em manutenção no momento. Por favor, tente novamente mais tarde.',
+            isSalesBotEnabled: true, // Default to enabled
         },
     });
 
@@ -58,7 +61,13 @@ const SettingsPanel = ({ setSection }: SettingsPanelProps) => {
             try {
                 const docSnap = await getDoc(settingsDocRef);
                 if (docSnap.exists()) {
-                    form.reset(docSnap.data() as SettingsFormData);
+                    // Reset form with fetched data, providing defaults for any missing fields
+                    const data = docSnap.data();
+                    form.reset({
+                        isMaintenanceMode: data.isMaintenanceMode || false,
+                        maintenanceMessage: data.maintenanceMessage || 'O site está em manutenção. Voltamos em breve.',
+                        isSalesBotEnabled: data.isSalesBotEnabled === undefined ? true : data.isSalesBotEnabled,
+                    });
                 }
             } catch (error: any) {
                 console.error("Error fetching settings:", error);
@@ -103,26 +112,27 @@ const SettingsPanel = ({ setSection }: SettingsPanelProps) => {
     }
 
     return (
-        <Card className="bg-secondary/50 border-border">
-            <CardHeader>
-                <CardTitle>Modo Manutenção</CardTitle>
-                <CardDescription>
-                    Ative para colocar o site offline para usuários comuns. Apenas administradores poderão acessar.
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+                {/* Maintenance Mode Card */}
+                <Card className="bg-card border-border">
+                    <CardHeader>
+                        <CardTitle>Modo Manutenção</CardTitle>
+                        <CardDescription>
+                            Ative para colocar o site offline para usuários comuns. Apenas administradores poderão acessar.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
                         <FormField
                             control={form.control}
                             name="isMaintenanceMode"
                             render={({ field }) => (
-                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-card">
+                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-secondary/50">
                                     <div className="space-y-0.5">
                                         <FormLabel className="text-base text-foreground">
                                             Ativar Modo Manutenção
                                         </FormLabel>
-                                        <FormDescription className="text-muted-foreground">
+                                        <FormDescription className="text-muted-foreground text-xs">
                                             Se ativado, apenas administradores podem fazer login.
                                         </FormDescription>
                                     </div>
@@ -150,23 +160,60 @@ const SettingsPanel = ({ setSection }: SettingsPanelProps) => {
                                             disabled={isSubmitting}
                                         />
                                     </FormControl>
-                                    <FormDescription className="text-muted-foreground">
-                                        Esta mensagem será exibida na tela de login e para usuários logados.
+                                    <FormDescription className="text-muted-foreground text-xs">
+                                        Esta mensagem será exibida na tela de manutenção.
                                     </FormDescription>
                                     <FormMessage />
                                 </FormItem>
                             )}
                         />
-                        <div className="flex justify-end">
-                            <Button type="submit" disabled={isSubmitting}>
-                                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                {isSubmitting ? "Salvando..." : "Salvar Configurações"}
-                            </Button>
-                        </div>
-                    </form>
-                </Form>
-            </CardContent>
-        </Card>
+                    </CardContent>
+                </Card>
+
+                {/* Sales Bot Card */}
+                <Card className="bg-card border-border">
+                    <CardHeader>
+                        <CardTitle>Automação de Vendas</CardTitle>
+                        <CardDescription>
+                            Controle o comportamento do assistente virtual no chat de consulta de vendas.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <FormField
+                            control={form.control}
+                            name="isSalesBotEnabled"
+                            render={({ field }) => (
+                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-secondary/50">
+                                    <div className="space-y-0.5">
+                                        <FormLabel className="text-base text-foreground">
+                                            Ativar Assistente de Vendas (Bot)
+                                        </FormLabel>
+                                        <FormDescription className="text-muted-foreground text-xs">
+                                            Se ativado, o bot enviará uma mensagem interativa ao criar uma consulta.
+                                        </FormDescription>
+                                    </div>
+                                    <FormControl>
+                                        <Switch
+                                            checked={field.value}
+                                            onCheckedChange={field.onChange}
+                                            aria-label="Ativar Assistente de Vendas"
+                                        />
+                                    </FormControl>
+                                </FormItem>
+                            )}
+                        />
+                    </CardContent>
+                </Card>
+
+                {/* Save Button */}
+                <div className="flex justify-end">
+                    <Button type="submit" disabled={isSubmitting}>
+                        {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        {isSubmitting ? "Salvando..." : "Salvar Todas as Configurações"}
+                    </Button>
+                </div>
+            </form>
+        </Form>
     );
 };
 

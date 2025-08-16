@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -277,7 +278,7 @@ export default function ProfilePage() {
                                         <Button asChild variant="outline" size="sm" className="border-yellow-500 text-yellow-600 hover:bg-yellow-500/10 hover:text-yellow-700 transition-colors text-xs px-3 py-1 h-auto">
                                           <Link href="/premium">
                                             <Star className="h-3 w-3 mr-1.5" />
-                                            Ver Planos Premium
+                                            Ver Planos e Serviços
                                           </Link>
                                         </Button>
                                       )}

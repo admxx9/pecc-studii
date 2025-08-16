@@ -90,7 +90,6 @@ export default function HomeClientPage() {
   const [levelUpInfo, setLevelUpInfo] = useState<{ oldRank: string, newRank: string } | null>(null);
   const previousRankRef = useRef<string | undefined>();
   const [activeChatChannelId, setActiveChatChannelId] = useState<string | null>(null);
-  const [triggerSalesTicket, setTriggerSalesTicket] = useState(false);
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -103,6 +102,19 @@ export default function HomeClientPage() {
     const params = useSearchParams();
     return params.get('lessonId');
   }
+  
+  // Effect to handle tab and channel changes from URL
+  useEffect(() => {
+    const tabFromUrl = searchParams.get('tab') as ActiveTab | null;
+    const channelIdFromUrl = searchParams.get('channelId');
+
+    if (tabFromUrl && Object.keys({aulas:1, ferramentas:1, chat:1, admin:1}).includes(tabFromUrl)) {
+      setActiveTab(tabFromUrl);
+    }
+    if (channelIdFromUrl) {
+      setActiveChatChannelId(channelIdFromUrl);
+    }
+  }, [searchParams]);
 
   // Effect to set initial lesson from URL param
   useEffect(() => {
@@ -488,16 +500,6 @@ export default function HomeClientPage() {
     // (using searchParams in ToolsContent is better for this)
   };
 
-  const handleCreateSalesTicket = () => {
-    setActiveTab('chat');
-    setTriggerSalesTicket(true);
-  };
-
-  const handleSalesTicketHandled = () => {
-    setTriggerSalesTicket(false);
-  };
-
-
   const selectedLessonData = lessons.find(lesson => lesson.id === selectedLessonId);
   const completedLessonsCount = lessons.filter(l => l.completed).length;
   const progressPercentage = lessons.length > 0 ? Math.round((completedLessonsCount / lessons.length) * 100) : 0;
@@ -742,13 +744,13 @@ export default function HomeClientPage() {
                        <p className="text-muted-foreground">Carregando ferramentas...</p>
                      </div>
                    }>
-                    <ToolsContent selectedCategory={selectedToolCategory} onCreateSalesTicket={handleCreateSalesTicket} />
+                    <ToolsContent selectedCategory={selectedToolCategory} />
                    </Suspense>
                 </div>
               </>
              )}
             {!isLoading && activeTab === 'chat' && (
-              <ChatContent userProfile={userProfile} activeChannelId={activeChatChannelId} setActiveChannelId={setActiveChatChannelId} triggerSalesTicket={triggerSalesTicket} onSalesTicketHandled={handleSalesTicketHandled} />
+              <ChatContent userProfile={userProfile} activeChannelId={activeChatChannelId} setActiveChannelId={setActiveChatChannelId} />
             )}
             {!isLoading && activeTab === 'admin' && userProfile?.isAdmin && (
                 <div className="w-full">
