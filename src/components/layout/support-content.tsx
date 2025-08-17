@@ -23,6 +23,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
     Select,
@@ -378,3 +379,4 @@ export default function SupportContent({ userProfile, triggerSalesTicket, onSale
     );
 }
 
+    
