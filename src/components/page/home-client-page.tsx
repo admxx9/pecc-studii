@@ -70,6 +70,8 @@ interface SiteSettings {
     isSalesBotEnabled: boolean;
 }
 
+type ServiceRequest = { type: 'quote' | 'purchase'; details: string } | null;
+
 export default function HomeClientPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('aulas');
   const [selectedToolCategory, setSelectedToolCategory] = useState<string | null>(null);
@@ -87,8 +89,7 @@ export default function HomeClientPage() {
   const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null);
   const [levelUpInfo, setLevelUpInfo] = useState<{ oldRank: string, newRank: string } | null>(null);
   const previousRankRef = useRef<string | undefined>();
-  const [activeChatChannelId, setActiveChatChannelId] = useState<string | null>(null);
-  const [triggerSalesTicket, setTriggerSalesTicket] = useState(false);
+  const [serviceRequest, setServiceRequest] = useState<ServiceRequest>(null);
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -99,15 +100,8 @@ export default function HomeClientPage() {
   // Effect to handle tab and channel changes from URL
   useEffect(() => {
     const tabFromUrl = searchParams.get('tab') as ActiveTab | null;
-    const ticketIdFromUrl = searchParams.get('ticketId');
-
     if (tabFromUrl && ['aulas', 'ferramentas', 'loja', 'suporte', 'admin'].includes(tabFromUrl)) {
       setActiveTab(tabFromUrl);
-    }
-     if (ticketIdFromUrl) {
-      // Logic to handle opening a specific ticket will be inside SupportContent
-      // but we can switch to the support tab.
-      setActiveTab('suporte');
     }
   }, [searchParams]);
 
@@ -371,10 +365,10 @@ export default function HomeClientPage() {
      router.push(`/tools/${toolId}`);
   };
   
-  const handleCreateSalesTicket = useCallback((mapType: 'GTA V' | 'GTA IV') => {
-    setActiveTab('suporte');
-    setTriggerSalesTicket(true); 
-  }, []);
+    const handleServiceRequest = useCallback((type: 'quote' | 'purchase', details: string) => {
+        setActiveTab('suporte');
+        setServiceRequest({ type, details });
+    }, []);
 
   const selectedLessonData = lessons.find(lesson => lesson.id === selectedLessonId);
   const completedLessonsCount = lessons.filter(l => l.completed).length;
@@ -570,14 +564,14 @@ export default function HomeClientPage() {
              )}
             {!isLoading && activeTab === 'loja' && (
                 <div className="w-full">
-                    <ShopContent onCreateSalesTicket={handleCreateSalesTicket} />
+                    <ShopContent onServiceRequest={handleServiceRequest} />
                 </div>
             )}
             {!isLoading && activeTab === 'suporte' && (
               <SupportContent 
                 userProfile={userProfile} 
-                triggerSalesTicket={triggerSalesTicket}
-                onSalesTicketHandled={() => setTriggerSalesTicket(false)}
+                serviceRequest={serviceRequest}
+                onServiceRequestHandled={() => setServiceRequest(null)}
               />
             )}
             {!isLoading && activeTab === 'admin' && userProfile?.isAdmin && (

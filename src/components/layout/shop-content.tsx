@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -16,10 +15,10 @@ import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 
 interface ShopContentProps {
-  onCreateSalesTicket: (mapType: 'GTA V' | 'GTA IV') => void;
+  onServiceRequest: (type: 'quote' | 'purchase', details: string) => void;
 }
 
-export default function ShopContent({ onCreateSalesTicket }: ShopContentProps) {
+export default function ShopContent({ onServiceRequest }: ShopContentProps) {
   const [items, setItems] = useState<Tool[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -77,8 +76,12 @@ export default function ShopContent({ onCreateSalesTicket }: ShopContentProps) {
     );
   };
 
-  const handleNavigateToItem = (itemId: string) => {
-    router.push(`/tools/${itemId}`);
+  const handlePurchaseClick = (itemName: string) => {
+    onServiceRequest('purchase', itemName);
+  };
+  
+  const handleQuoteClick = (mapType: 'GTA V' | 'GTA IV') => {
+      onServiceRequest('quote', mapType);
   };
 
   return (
@@ -136,8 +139,7 @@ export default function ShopContent({ onCreateSalesTicket }: ShopContentProps) {
             {filteredItems.map(item => (
               <Card 
                 key={item.id} 
-                className="flex flex-col bg-card border rounded-lg shadow-sm overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer"
-                onClick={() => handleNavigateToItem(item.id)}
+                className="flex flex-col bg-card border rounded-lg shadow-sm overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
               >
                   <CardHeader className="p-0 relative">
                      {item.price !== undefined && item.price > 0 ? (
@@ -173,9 +175,9 @@ export default function ShopContent({ onCreateSalesTicket }: ShopContentProps) {
                        )}
                   </CardContent>
                    <CardFooter className="p-4 pt-0">
-                       <Button className="w-full" variant="outline">
-                           Ver Detalhes
-                           <ArrowRight className="ml-2 h-4 w-4" />
+                       <Button className="w-full" variant="outline" onClick={() => handlePurchaseClick(item.name)}>
+                           <ShoppingCart className="mr-2 h-4 w-4" />
+                           Tenho Interesse
                        </Button>
                    </CardFooter>
               </Card>
@@ -196,7 +198,7 @@ export default function ShopContent({ onCreateSalesTicket }: ShopContentProps) {
                         </CardDescription>
                     </CardHeader>
                     <CardFooter className="mt-auto">
-                         <Button className="w-full" onClick={() => onCreateSalesTicket('GTA V')}>
+                         <Button className="w-full" onClick={() => handleQuoteClick('GTA V')}>
                             <Bot className="mr-2 h-4 w-4" /> Solicitar Orçamento
                          </Button>
                     </CardFooter>
@@ -209,7 +211,7 @@ export default function ShopContent({ onCreateSalesTicket }: ShopContentProps) {
                         </CardDescription>
                     </CardHeader>
                     <CardFooter className="mt-auto">
-                         <Button className="w-full" onClick={() => onCreateSalesTicket('GTA IV')}>
+                         <Button className="w-full" onClick={() => handleQuoteClick('GTA IV')}>
                              <Bot className="mr-2 h-4 w-4" /> Solicitar Orçamento
                          </Button>
                     </CardFooter>

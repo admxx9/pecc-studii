@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Send, UserCircle, MessageSquareReply, X, Trash2, Copy, MoreHorizontal, ChevronLeft, LifeBuoy, Ticket, Loader2, MessageSquarePlus, Search } from 'lucide-react';
+import { Send, UserCircle, MessageSquareReply, X, Trash2, Copy, MoreHorizontal, ChevronLeft, LifeBuoy, Ticket, Loader2, MessageSquarePlus, Search, ShoppingCart, Hammer } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -36,12 +36,15 @@ import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, Timest
 import { useToast } from "@/hooks/use-toast";
 import { ranks, rankIcons } from '@/config/ranks';
 
+type TicketType = 'support' | 'quote' | 'purchase';
+
 interface SupportTicket {
   id: string;
   subject: string;
   status: 'open' | 'closed';
   userName: string;
   userId: string;
+  type: TicketType;
   createdAt: Timestamp;
   lastMessage?: string;
   lastMessageAt?: Timestamp;
@@ -64,8 +67,8 @@ interface ChatMessage {
 
 interface SupportContentProps {
   userProfile: UserProfile | null;
-  triggerSalesTicket: boolean;
-  onSalesTicketHandled: () => void;
+  serviceRequest: { type: 'quote'; details: string } | { type: 'purchase'; details: string } | null;
+  onServiceRequestHandled: () => void;
 }
 
 const renderMessageText = (text: string) => {
@@ -83,7 +86,7 @@ const formatDate = (timestamp: Timestamp | null | undefined): string => {
 };
 
 
-export default function SupportContent({ userProfile, triggerSalesTicket, onSalesTicketHandled }: SupportContentProps) {
+export default function SupportContent({ userProfile, serviceRequest, onServiceRequestHandled }: SupportContentProps) {
     const [tickets, setTickets] = useState<SupportTicket[]>([]);
     const [activeTicket, setActiveTicket] = useState<SupportTicket | null>(null);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -92,22 +95,35 @@ export default function SupportContent({ userProfile, triggerSalesTicket, onSale
     const [isCreating, setIsCreating] = useState(false);
     const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
     const [ticketToDelete, setTicketToDelete] = useState<SupportTicket | null>(null);
-    const [filter, setFilter] = useState<'open' | 'closed' | 'all'>('open');
+    const [filter, setFilter] = useState<'all' | 'support' | 'quote' | 'purchase'>('all');
     const [searchTerm, setSearchTerm] = useState('');
     const scrollAreaRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
-    const isCreatingRef = useRef(false); // Ref to prevent duplicate ticket creation
+    const isCreatingRef = useRef(false);
 
-    // Effect to handle sales ticket creation trigger
+    // Effect to handle service requests (quote or purchase)
     useEffect(() => {
-        const createTicket = async (subject: string, initialMessage: string) => {
-            if (!userProfile || !db) return;
-
-            // Use ref to prevent race conditions
-            if (isCreatingRef.current) return;
+        const createTicketForService = async () => {
+            if (!serviceRequest || !userProfile || !db || isCreatingRef.current) return;
+            
             isCreatingRef.current = true;
             setIsCreating(true);
+            onServiceRequestHandled(); // Reset the trigger immediately
+
+            let subject = '';
+            let initialMessage = '';
+            let type: TicketType = 'support';
+
+            if (serviceRequest.type === 'quote') {
+                type = 'quote';
+                subject = `Orçamento: ${serviceRequest.details} - ${userProfile.displayName}`;
+                initialMessage = `Olá ${userProfile.displayName}! Recebemos sua solicitação de orçamento para conversão de mapa (${serviceRequest.details}). Por favor, forneça o máximo de detalhes sobre o que você precisa (links, referências, etc.) para que possamos avaliar.`;
+            } else if (serviceRequest.type === 'purchase') {
+                type = 'purchase';
+                subject = `Compra: ${serviceRequest.details} - ${userProfile.displayName}`;
+                initialMessage = `Olá! Vi que você tem interesse no produto "${serviceRequest.details}". Um administrador entrará em contato em breve para finalizar a compra com você.`;
+            }
 
             try {
                 const newTicketRef = await addDoc(collection(db, 'supportTickets'), {
@@ -115,39 +131,32 @@ export default function SupportContent({ userProfile, triggerSalesTicket, onSale
                     status: 'open',
                     userId: userProfile.uid,
                     userName: userProfile.displayName,
+                    type,
                     createdAt: serverTimestamp(),
                 });
 
                 await addDoc(collection(newTicketRef, 'messages'), {
                     text: initialMessage,
-                    user: { uid: 'bot', name: 'Assistente de Suporte', avatar: 'https://i.imgur.com/sXliRZl.png', isAdmin: true },
+                    user: { uid: 'bot', name: 'Assistente', avatar: 'https://i.imgur.com/sXliRZl.png', isAdmin: true },
                     createdAt: serverTimestamp(),
                     isBotMessage: true,
                 });
 
-                toast({ title: "Ticket Criado!", description: `Seu ticket foi aberto com sucesso.`, className: "bg-green-600 text-white" });
-                const newTicketData = { id: newTicketRef.id, subject, status: 'open' as const, userId: userProfile.uid, userName: userProfile.displayName, createdAt: new Timestamp(Date.now() / 1000, 0) };
+                toast({ title: "Ticket Criado!", description: `Seu ticket de ${type === 'quote' ? 'orçamento' : 'compra'} foi aberto.`, className: "bg-green-600 text-white" });
+                const newTicketData = { id: newTicketRef.id, subject, status: 'open' as const, userId: userProfile.uid, userName: userProfile.displayName, type, createdAt: new Timestamp(Date.now() / 1000, 0) };
                 setActiveTicket(newTicketData);
-                setTickets(prev => [newTicketData, ...prev]);
-
             } catch (error) {
-                 console.error("Error creating ticket:", error);
+                 console.error("Error creating service ticket:", error);
                  toast({ title: "Erro", description: "Não foi possível criar seu ticket.", variant: "destructive" });
             } finally {
                 setIsCreating(false);
-                isCreatingRef.current = false; // Release the lock
+                isCreatingRef.current = false;
             }
         };
 
-        if (triggerSalesTicket && userProfile) {
-            onSalesTicketHandled(); // Immediately reset the trigger in parent
-            createTicket(
-                `Solicitação de Orçamento - ${userProfile.displayName}`,
-                `Olá ${userProfile.displayName}! Recebemos sua solicitação de orçamento. Por favor, forneça o máximo de detalhes sobre o que você precisa (links, referências, etc.) para que possamos avaliar.`
-            );
-        }
+        createTicketForService();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [triggerSalesTicket, userProfile]);
+    }, [serviceRequest, userProfile]);
 
 
     // Fetch tickets
@@ -210,17 +219,18 @@ export default function SupportContent({ userProfile, triggerSalesTicket, onSale
                 status: 'open',
                 userId: userProfile.uid,
                 userName: userProfile.displayName,
+                type: 'support',
                 createdAt: serverTimestamp(),
             });
 
             await addDoc(collection(newTicketRef, 'messages'), {
                 text: initialMessage,
-                user: { uid: 'bot', name: 'Assistente de Suporte', avatar: 'https://i.imgur.com/sXliRZl.png', isAdmin: true },
+                user: { uid: 'bot', name: 'Assistente', avatar: 'https://i.imgur.com/sXliRZl.png', isAdmin: true },
                 createdAt: serverTimestamp(),
                 isBotMessage: true,
             });
             toast({ title: "Ticket Criado!", description: `Seu ticket foi aberto com sucesso.`, className: "bg-green-600 text-white" });
-            const newTicketData = { id: newTicketRef.id, subject, status: 'open' as const, userId: userProfile.uid, userName: userProfile.displayName, createdAt: new Timestamp(Date.now() / 1000, 0) };
+            const newTicketData = { id: newTicketRef.id, subject, status: 'open' as const, userId: userProfile.uid, userName: userProfile.displayName, type: 'support' as const, createdAt: new Timestamp(Date.now() / 1000, 0) };
             setActiveTicket(newTicketData);
         } catch (error) {
              console.error("Error creating ticket:", error);
@@ -287,12 +297,20 @@ export default function SupportContent({ userProfile, triggerSalesTicket, onSale
 
     const filteredTickets = useMemo(() => {
         return tickets.filter(ticket => {
-            const statusMatch = filter === 'all' || ticket.status === filter;
+            const typeMatch = filter === 'all' || ticket.type === filter;
             const searchMatch = searchTerm === '' || ticket.userName.toLowerCase().includes(searchTerm.toLowerCase()) || ticket.subject.toLowerCase().includes(searchTerm.toLowerCase());
-            return statusMatch && searchMatch;
+            return typeMatch && searchMatch;
         });
     }, [tickets, filter, searchTerm]);
 
+    const getTicketTypeBadge = (type: TicketType) => {
+        switch (type) {
+            case 'quote': return <Badge variant="outline" className="text-blue-500 border-blue-500">Orçamento</Badge>;
+            case 'purchase': return <Badge variant="outline" className="text-green-500 border-green-500">Compra</Badge>;
+            case 'support':
+            default: return <Badge variant="secondary">Suporte</Badge>;
+        }
+    };
 
     if (activeTicket) {
         return (
@@ -347,7 +365,7 @@ export default function SupportContent({ userProfile, triggerSalesTicket, onSale
                     </div>
                     <Button onClick={handleCreateGenericTicket} disabled={isCreating}>
                         {isCreating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MessageSquarePlus className="mr-2 h-4 w-4" />}
-                        Abrir Novo Ticket
+                        Abrir Ticket de Suporte
                     </Button>
                 </div>
                  {userProfile?.isAdmin && (
@@ -356,16 +374,12 @@ export default function SupportContent({ userProfile, triggerSalesTicket, onSale
                             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                             <Input placeholder="Buscar por nome ou assunto..." className="pl-8 w-full" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                         </div>
-                        <Select value={filter} onValueChange={(value) => setFilter(value as any)}>
-                            <SelectTrigger className="w-full sm:w-[180px]">
-                                <SelectValue placeholder="Filtrar por status..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Todos os Tickets</SelectItem>
-                                <SelectItem value="open">Abertos</SelectItem>
-                                <SelectItem value="closed">Fechados</SelectItem>
-                            </SelectContent>
-                        </Select>
+                         <div className="flex items-center gap-2">
+                            <Button variant={filter === 'all' ? 'default' : 'outline'} onClick={() => setFilter('all')} size="sm">Todos</Button>
+                            <Button variant={filter === 'support' ? 'default' : 'outline'} onClick={() => setFilter('support')} size="sm">Suporte</Button>
+                            <Button variant={filter === 'quote' ? 'default' : 'outline'} onClick={() => setFilter('quote')} size="sm">Orçamentos</Button>
+                            <Button variant={filter === 'purchase' ? 'default' : 'outline'} onClick={() => setFilter('purchase')} size="sm">Compras</Button>
+                         </div>
                     </div>
                 )}
             </CardHeader>
@@ -380,7 +394,7 @@ export default function SupportContent({ userProfile, triggerSalesTicket, onSale
                             <div className="text-center text-muted-foreground py-10">
                                 <LifeBuoy className="mx-auto h-12 w-12" />
                                 <h3 className="mt-4 text-lg font-semibold">Nenhum ticket encontrado</h3>
-                                <p className="mt-1 text-sm">Você não tem tickets de suporte no momento.</p>
+                                <p className="mt-1 text-sm">Você não tem tickets nesta categoria.</p>
                             </div>
                         ) : (
                             <ul className="space-y-3">
@@ -388,7 +402,10 @@ export default function SupportContent({ userProfile, triggerSalesTicket, onSale
                                     <li key={ticket.id} onClick={() => setActiveTicket(ticket)} className="p-3 bg-secondary rounded-md cursor-pointer hover:bg-accent transition-colors">
                                         <div className="flex justify-between items-start">
                                             <div>
-                                                <p className="font-semibold text-foreground truncate">{ticket.subject}</p>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    {getTicketTypeBadge(ticket.type)}
+                                                    <p className="font-semibold text-foreground truncate">{ticket.subject}</p>
+                                                </div>
                                                 <p className="text-xs text-muted-foreground">
                                                     {userProfile?.isAdmin ? `Usuário: ${ticket.userName}` : 'Clique para ver as mensagens'}
                                                 </p>
