@@ -67,7 +67,7 @@ interface ChatMessage {
 
 interface SupportContentProps {
   userProfile: UserProfile | null;
-  serviceRequest: { type: 'quote'; details: string } | { type: 'purchase'; details: string } | null;
+  serviceRequest: { type: 'quote' | 'purchase'; details: string } | null;
   onServiceRequestHandled: () => void;
 }
 
@@ -109,8 +109,7 @@ export default function SupportContent({ userProfile, serviceRequest, onServiceR
             
             isCreatingRef.current = true;
             setIsCreating(true);
-            onServiceRequestHandled(); // Reset the trigger immediately
-
+            
             let subject = '';
             let initialMessage = '';
             let type: TicketType = 'support';
@@ -124,6 +123,8 @@ export default function SupportContent({ userProfile, serviceRequest, onServiceR
                 subject = `Compra: ${serviceRequest.details} - ${userProfile.displayName}`;
                 initialMessage = `Olá! Vi que você tem interesse no produto "${serviceRequest.details}". Um administrador entrará em contato em breve para finalizar a compra com você.`;
             }
+
+            onServiceRequestHandled(); // Reset the trigger immediately
 
             try {
                 const newTicketRef = await addDoc(collection(db, 'supportTickets'), {
@@ -280,15 +281,14 @@ export default function SupportContent({ userProfile, serviceRequest, onServiceR
         }
     };
 
-    const handleDeleteTicket = async () => {
-        if (!ticketToDelete || !db) return;
+    const handleDeleteTicket = async (ticket: SupportTicket) => {
+        if (!ticket || !db) return;
         try {
-            await deleteDoc(doc(db, 'supportTickets', ticketToDelete.id));
+            await deleteDoc(doc(db, 'supportTickets', ticket.id));
             toast({ title: "Ticket Excluído", description: "O ticket e todas as suas mensagens foram removidos." });
-            if (activeTicket?.id === ticketToDelete.id) {
+            if (activeTicket?.id === ticket.id) {
                 setActiveTicket(null);
             }
-            setTicketToDelete(null);
         } catch (error) {
             console.error("Error deleting ticket:", error);
             toast({ title: "Erro", description: "Não foi possível excluir o ticket.", variant: "destructive" });
@@ -426,7 +426,7 @@ export default function SupportContent({ userProfile, serviceRequest, onServiceR
                                                             </AlertDialogHeader>
                                                             <AlertDialogFooter>
                                                                 <AlertDialogCancel onClick={(e) => e.stopPropagation()}>Cancelar</AlertDialogCancel>
-                                                                <AlertDialogAction onClick={(e) => {e.stopPropagation(); setTicketToDelete(ticket); handleDeleteTicket();}}>Excluir</AlertDialogAction>
+                                                                <AlertDialogAction onClick={(e) => {e.stopPropagation(); handleDeleteTicket(ticket);}}>Excluir</AlertDialogAction>
                                                             </AlertDialogFooter>
                                                         </AlertDialogContent>
                                                      </AlertDialog>
