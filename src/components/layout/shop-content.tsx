@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, BrainCircuit, ShoppingCart, Tag, Search, ArrowRight, LayoutGrid, List } from 'lucide-react';
+import { Loader2, BrainCircuit, ShoppingCart, Tag, Search, ArrowRight, LayoutGrid, List, Bot } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
@@ -15,12 +15,11 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 
-
 interface ShopContentProps {
-  // Props are kept in case they are needed in the future, e.g., for passing user profile
+  onCreateSalesTicket: (mapType: 'GTA V' | 'GTA IV') => void;
 }
 
-export default function ShopContent({}: ShopContentProps) {
+export default function ShopContent({ onCreateSalesTicket }: ShopContentProps) {
   const [items, setItems] = useState<Tool[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -84,20 +83,16 @@ export default function ShopContent({}: ShopContentProps) {
 
   return (
     <div className="flex-1 container mx-auto py-8 md:py-12 px-4 sm:px-6 lg:px-8">
-      {/* Hero Section */}
-      <div className="relative bg-card border border-border rounded-lg overflow-hidden mb-12 p-8 md:p-12 text-center flex flex-col items-center">
+      {/* Hero Section - Reduced Size */}
+      <div className="relative bg-card border border-border rounded-lg overflow-hidden mb-8 p-6 md:p-8 text-center flex flex-col items-center">
          <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
          <div className="relative z-10">
-            <h2 className="text-3xl md:text-5xl font-bold text-foreground mb-3">
-              Studio PECC Store
+            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-2">
+              Loja & Serviços
             </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-6">
-              Encontre assets, mapas e ferramentas exclusivas para levar seu projeto para o próximo nível.
+            <p className="text-md text-muted-foreground max-w-2xl mx-auto">
+              Encontre assets, mapas e ferramentas ou solicite um serviço de conversão.
             </p>
-            <Button size="lg" onClick={() => document.getElementById('store-items')?.scrollIntoView({ behavior: 'smooth' })}>
-                Explorar Produtos
-                <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
          </div>
       </div>
 
@@ -107,7 +102,7 @@ export default function ShopContent({}: ShopContentProps) {
              <div className="relative flex-1">
                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                  <Input 
-                    placeholder="Buscar por nome ou descrição..."
+                    placeholder="Buscar produtos na loja..."
                     className="pl-10 h-11"
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
@@ -125,7 +120,7 @@ export default function ShopContent({}: ShopContentProps) {
       </div>
 
       {/* Items Grid */}
-      <section>
+      <section className="mb-12">
         {isLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-96 w-full" />)}
@@ -133,7 +128,7 @@ export default function ShopContent({}: ShopContentProps) {
         ) : filteredItems.length === 0 ? (
             <div className="text-center py-16 bg-secondary/30 rounded-lg">
                 <ShoppingCart className="mx-auto h-12 w-12 text-muted-foreground" />
-                <h3 className="mt-4 text-lg font-semibold text-foreground">Nenhum item encontrado</h3>
+                <h3 className="mt-4 text-lg font-semibold text-foreground">Nenhum produto encontrado</h3>
                 <p className="mt-1 text-sm text-muted-foreground">Tente ajustar seus filtros de busca ou volte mais tarde.</p>
             </div>
         ) : (
@@ -188,6 +183,40 @@ export default function ShopContent({}: ShopContentProps) {
             </div>
         )}
       </section>
+
+      {/* Services Section */}
+       <section>
+            <h3 className="text-2xl font-bold text-center text-foreground mb-8">Serviços Exclusivos</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+                <Card className="flex flex-col bg-card border rounded-lg shadow-sm overflow-hidden">
+                    <CardHeader>
+                        <CardTitle>Conversão de Mapa: GTA V</CardTitle>
+                        <CardDescription className="text-muted-foreground">
+                            A vasta e detalhada Los Santos ao seu alcance. Oferecemos uma conversão de alta fidelidade, otimizada para performance e pronta para ser explorada no seu servidor.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardFooter className="mt-auto">
+                         <Button className="w-full" onClick={() => onCreateSalesTicket('GTA V')}>
+                            <Bot className="mr-2 h-4 w-4" /> Solicitar Orçamento
+                         </Button>
+                    </CardFooter>
+                </Card>
+                <Card className="flex flex-col bg-card border rounded-lg shadow-sm overflow-hidden">
+                    <CardHeader>
+                        <CardTitle>Conversão de Mapa: GTA IV</CardTitle>
+                        <CardDescription className="text-muted-foreground">
+                            A atmosfera densa e o design complexo de Liberty City. Ideal para projetos que buscam uma ambientação urbana única e imersiva.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardFooter className="mt-auto">
+                         <Button className="w-full" onClick={() => onCreateSalesTicket('GTA IV')}>
+                             <Bot className="mr-2 h-4 w-4" /> Solicitar Orçamento
+                         </Button>
+                    </CardFooter>
+                </Card>
+            </div>
+       </section>
+
        <style jsx global>{`
         .bg-grid-pattern {
           background-image:

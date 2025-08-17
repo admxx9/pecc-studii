@@ -103,6 +103,53 @@ export default function SupportContent({ userProfile, triggerSalesTicket, onSale
     const inputRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
 
+    const createTicket = async (subject: string, initialMessage: string) => {
+        if (!userProfile || !db) {
+            toast({ title: "Ação Necessária", description: "Faça login para criar um ticket.", variant: "destructive" });
+            return;
+        }
+        setIsCreating(true);
+        try {
+            const newTicketRef = await addDoc(collection(db, 'supportTickets'), {
+                subject,
+                status: 'open',
+                userId: userProfile.uid,
+                userName: userProfile.displayName,
+                createdAt: serverTimestamp(),
+            });
+
+            await addDoc(collection(newTicketRef, 'messages'), {
+                text: initialMessage,
+                user: { uid: 'bot', name: 'Assistente de Suporte', avatar: 'https://i.imgur.com/sXliRZl.png', isAdmin: true },
+                createdAt: serverTimestamp(),
+                isBotMessage: true,
+            });
+
+            toast({ title: "Ticket Criado!", description: `Seu ticket foi aberto com sucesso.`, className: "bg-green-600 text-white" });
+            const newTicketData = { id: newTicketRef.id, subject, status: 'open' as const, userId: userProfile.uid, userName: userProfile.displayName, createdAt: new Timestamp(Date.now() / 1000, 0) };
+            setActiveTicket(newTicketData);
+            setTickets(prev => [newTicketData, ...prev]);
+
+        } catch (error) {
+             console.error("Error creating ticket:", error);
+             toast({ title: "Erro", description: "Não foi possível criar seu ticket.", variant: "destructive" });
+        } finally {
+            setIsCreating(false);
+        }
+    };
+    
+    // Effect to handle sales ticket creation trigger
+    useEffect(() => {
+        if (triggerSalesTicket && userProfile) {
+            createTicket(
+                `Solicitação de Orçamento - ${userProfile.displayName}`,
+                `Olá ${userProfile.displayName}! Recebemos sua solicitação de orçamento. Por favor, forneça o máximo de detalhes sobre o que você precisa (links, referências, etc.) para que possamos avaliar.`
+            );
+            onSalesTicketHandled();
+        }
+    }, [triggerSalesTicket, userProfile, onSalesTicketHandled]);
+
+
     // Fetch tickets
     useEffect(() => {
         if (!db || !userProfile) {
@@ -148,38 +195,13 @@ export default function SupportContent({ userProfile, triggerSalesTicket, onSale
           if (viewport) viewport.scrollTop = viewport.scrollHeight;
         }
     }, [messages]);
-
-    const handleCreateTicket = async () => {
-        if (!userProfile || !db) {
-             toast({ title: "Ação Necessária", description: "Faça login para criar um ticket.", variant: "destructive" });
-             return;
-        }
-        setIsCreating(true);
-        try {
-            const newTicketRef = await addDoc(collection(db, 'supportTickets'), {
-                subject: `Ticket de Suporte - ${userProfile.displayName}`,
-                status: 'open',
-                userId: userProfile.uid,
-                userName: userProfile.displayName,
-                createdAt: serverTimestamp(),
-            });
-
-            await addDoc(collection(newTicketRef, 'messages'), {
-                text: `Olá ${userProfile.displayName}! Descreva seu problema em detalhes e um administrador irá respondê-lo em breve.`,
-                user: { uid: 'bot', name: 'Assistente de Suporte', avatar: 'https://i.imgur.com/sXliRZl.png', isAdmin: true },
-                createdAt: serverTimestamp(),
-                isBotMessage: true,
-            });
-
-            toast({ title: "Ticket Criado!", description: `Seu ticket de suporte foi aberto com sucesso.`, className: "bg-green-600 text-white" });
-            setActiveTicket({ id: newTicketRef.id, subject: `Ticket de Suporte - ${userProfile.displayName}`, status: 'open', userId: userProfile.uid, userName: userProfile.displayName, createdAt: new Timestamp(Date.now() / 1000, 0) });
-        } catch (error) {
-             console.error("Error creating ticket:", error);
-             toast({ title: "Erro", description: "Não foi possível criar seu ticket.", variant: "destructive" });
-        } finally {
-            setIsCreating(false);
-        }
-    };
+    
+    const handleCreateGenericTicket = () => {
+        createTicket(
+             `Ticket de Suporte - ${userProfile?.displayName}`,
+             `Olá ${userProfile?.displayName}! Descreva seu problema em detalhes e um administrador irá respondê-lo em breve.`
+        );
+    }
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -296,7 +318,7 @@ export default function SupportContent({ userProfile, triggerSalesTicket, onSale
                         <CardTitle className="text-2xl">Central de Suporte</CardTitle>
                         <CardDescription>Veja seus tickets ou abra um novo chamado.</CardDescription>
                     </div>
-                    <Button onClick={handleCreateTicket} disabled={isCreating}>
+                    <Button onClick={handleCreateGenericTicket} disabled={isCreating}>
                         {isCreating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MessageSquarePlus className="mr-2 h-4 w-4" />}
                         Abrir Novo Ticket
                     </Button>
@@ -325,8 +347,7 @@ export default function SupportContent({ userProfile, triggerSalesTicket, onSale
                     <div className="p-6 pt-0">
                         {isLoading ? (
                             <div className="space-y-3">
-                                <div className="h-16 bg-muted rounded-md animate-pulse"></div>
-                                <div className="h-16 bg-muted rounded-md animate-pulse"></div>
+                                {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-16 rounded-md" />)}
                             </div>
                         ) : filteredTickets.length === 0 ? (
                             <div className="text-center text-muted-foreground py-10">
@@ -364,7 +385,7 @@ export default function SupportContent({ userProfile, triggerSalesTicket, onSale
                                                                 <AlertDialogAction onClick={(e) => {e.stopPropagation(); setTicketToDelete(ticket); handleDeleteTicket();}}>Excluir</AlertDialogAction>
                                                             </AlertDialogFooter>
                                                         </AlertDialogContent>
-                                                    </AlertDialog>
+                                                     </AlertDialog>
                                                 )}
                                             </div>
                                         </div>
@@ -378,5 +399,3 @@ export default function SupportContent({ userProfile, triggerSalesTicket, onSale
         </Card>
     );
 }
-
-    
