@@ -21,7 +21,7 @@ export interface QuoteService {
     id: string;
     title: string;
     description: string;
-    icon: keyof typeof LucideIcons;
+    imageUrl: string; // Changed from icon to imageUrl
     createdAt?: any;
 }
 
@@ -155,11 +155,6 @@ export default function ShopContent({ onServiceRequest }: ShopContentProps) {
       onServiceRequest('quote', serviceTitle);
   };
 
-  const getIcon = (iconName: keyof typeof LucideIcons) => {
-    const Icon = LucideIcons[iconName];
-    return Icon ? <Icon className="w-10 h-10 mb-4 text-primary" /> : <Bot className="w-10 h-10 mb-4 text-primary"/>;
-  };
-
   return (
     <div className="flex-1 container mx-auto py-8 md:py-12 px-4 sm:px-6 lg:px-8">
        <Tabs defaultValue="ready-maps" className="w-full">
@@ -184,17 +179,21 @@ export default function ShopContent({ onServiceRequest }: ShopContentProps) {
                     <Skeleton className="h-64 w-full" />
                 </div>
              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                     {quoteServices.map(service => (
-                         <Card key={service.id} className="flex flex-col bg-card border rounded-lg shadow-sm overflow-hidden text-center items-center p-6">
-                            <CardHeader>
-                                {getIcon(service.icon)}
-                                <CardTitle>{service.title}</CardTitle>
-                                <CardDescription className="text-muted-foreground pt-2">
+                         <Card key={service.id} className="flex flex-col bg-card border rounded-lg shadow-sm overflow-hidden text-center items-center p-0">
+                            <CardHeader className="p-0 w-full">
+                                <div className="aspect-video relative">
+                                    <Image src={service.imageUrl} alt={service.title} layout="fill" objectFit="cover" className="rounded-t-lg" data-ai-hint="service cover" />
+                                </div>
+                            </CardHeader>
+                             <CardContent className="p-4 w-full">
+                                 <CardTitle className="text-base font-semibold">{service.title}</CardTitle>
+                                 <CardDescription className="text-muted-foreground text-xs pt-2">
                                     {service.description}
                                 </CardDescription>
-                            </CardHeader>
-                            <CardFooter className="mt-auto">
+                             </CardContent>
+                            <CardFooter className="p-4 pt-0 w-full">
                                 <Button className="w-full" onClick={() => handleQuoteClick(service.title)}>
                                     <Bot className="mr-2 h-4 w-4" /> Solicitar Orçamento
                                 </Button>

@@ -126,7 +126,7 @@ const ManageQuoteServicesList = ({ setSection, onEditQuote }: ManageQuoteService
                         <TableRow>
                             <TableHead>Título</TableHead>
                             <TableHead>Descrição</TableHead>
-                            <TableHead>Ícone</TableHead>
+                            <TableHead>URL da Imagem</TableHead>
                             <TableHead className="text-right">Ações</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -145,7 +145,7 @@ const ManageQuoteServicesList = ({ setSection, onEditQuote }: ManageQuoteService
                                 <TableRow key={service.id}>
                                     <TableCell className="font-medium text-foreground">{service.title}</TableCell>
                                     <TableCell className="text-muted-foreground text-xs max-w-xs truncate">{service.description}</TableCell>
-                                    <TableCell className="text-muted-foreground font-mono text-xs">{service.icon}</TableCell>
+                                    <TableCell className="text-muted-foreground font-mono text-xs truncate max-w-xs">{service.imageUrl}</TableCell>
                                     <TableCell className="text-right space-x-2">
                                         <Button
                                             variant="outline"

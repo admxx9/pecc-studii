@@ -29,7 +29,7 @@ interface AddQuoteServiceFormProps {
 export const quoteServiceSchema = z.object({
     title: z.string().min(3, { message: "Título deve ter pelo menos 3 caracteres." }),
     description: z.string().min(10, { message: "Descrição deve ter pelo menos 10 caracteres." }),
-    icon: z.string().min(2, { message: "Nome do ícone é obrigatório (ex: 'Bot')." }),
+    imageUrl: z.string().url({ message: "Por favor, insira uma URL de imagem válida." }),
 });
 
 export type QuoteServiceFormData = z.infer<typeof quoteServiceSchema>;
@@ -43,7 +43,7 @@ export default function AddQuoteServiceForm({ setSection }: AddQuoteServiceFormP
         defaultValues: {
             title: "",
             description: "",
-            icon: "Bot",
+            imageUrl: "",
         },
     });
 
@@ -117,15 +117,15 @@ export default function AddQuoteServiceForm({ setSection }: AddQuoteServiceFormP
                 />
                  <FormField
                     control={form.control}
-                    name="icon"
+                    name="imageUrl"
                     render={({ field }) => (
                         <FormItem>
-                            <FormLabel className="text-foreground">Nome do Ícone (Lucide)</FormLabel>
+                            <FormLabel className="text-foreground">URL da Imagem de Capa</FormLabel>
                             <FormControl>
-                                <Input placeholder="Ex: Bot, Car, Map" {...field} className="bg-input" />
+                                <Input placeholder="https://exemplo.com/imagem.png" {...field} className="bg-input" />
                             </FormControl>
                              <FormDescription className="text-xs text-muted-foreground">
-                                Use um nome de ícone válido da biblioteca <a href="https://lucide.dev/icons/" target="_blank" rel="noopener noreferrer" className="underline">Lucide React</a>.
+                                Cole o link para a imagem que representará o serviço.
                              </FormDescription>
                             <FormMessage />
                         </FormItem>

@@ -17,7 +17,7 @@ import {
     FormDescription,
 } from "@/components/ui/form";
 import { db } from "@/lib/firebase";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2, Loader2 } from 'lucide-react';
 import {
@@ -49,7 +49,7 @@ export default function EditQuoteServiceForm({ setSection, quoteService }: EditQ
         defaultValues: {
             title: quoteService.title || "",
             description: quoteService.description || "",
-            icon: quoteService.icon || "Bot",
+            imageUrl: quoteService.imageUrl || "",
         },
     });
 
@@ -91,7 +91,7 @@ export default function EditQuoteServiceForm({ setSection, quoteService }: EditQ
         const serviceDocRef = doc(db, "quoteServices", quoteService.id);
 
         try {
-            await doc(serviceDocRef).delete();
+            await deleteDoc(serviceDocRef);
             toast({
                 title: "Serviço Excluído!",
                 description: `O serviço "${quoteService.title}" foi removido com sucesso.`,
@@ -141,15 +141,15 @@ export default function EditQuoteServiceForm({ setSection, quoteService }: EditQ
                 />
                 <FormField
                     control={form.control}
-                    name="icon"
+                    name="imageUrl"
                     render={({ field }) => (
                         <FormItem>
-                            <FormLabel className="text-foreground">Nome do Ícone (Lucide)</FormLabel>
+                            <FormLabel className="text-foreground">URL da Imagem de Capa</FormLabel>
                             <FormControl>
-                                <Input placeholder="Ex: Bot, Car, Map" {...field} className="bg-input" />
+                                <Input placeholder="https://exemplo.com/imagem.png" {...field} className="bg-input" />
                             </FormControl>
                             <FormDescription className="text-xs text-muted-foreground">
-                                Use um nome de ícone válido da biblioteca <a href="https://lucide.dev/icons/" target="_blank" rel="noopener noreferrer" className="underline">Lucide React</a>.
+                                Cole o link para a imagem que representará o serviço.
                             </FormDescription>
                             <FormMessage />
                         </FormItem>
