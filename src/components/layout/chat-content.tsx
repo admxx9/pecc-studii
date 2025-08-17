@@ -231,7 +231,7 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
             } catch (error) { console.error("Error fetching users for mentions:", error); }
         };
         fetchUsers();
-    }, [db]);
+    }, []);
     
     useEffect(() => {
         if (!db || !userProfile) return;
@@ -239,7 +239,6 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
     
         let unsubscribers: Unsubscribe[] = [];
 
-        // Fetch all channels relevant to the user in parallel
         const fetchAllUserChannels = async () => {
             let combinedChannels: ChatChannel[] = [];
             const publicChannelsQuery = query(collection(db, 'chatChannels'), where("isPrivate", "==", false));
@@ -283,7 +282,7 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
         unsubscribers.push(unsubCategories);
 
         return () => unsubscribers.forEach(unsub => unsub());
-    }, [toast, userProfile, db]);
+    }, [toast, userProfile]);
     
      const { visibleCategories, visibleChannels } = useMemo(() => {
         if (!userProfile) return { visibleCategories: [], visibleChannels: [] };
@@ -337,7 +336,7 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
       toast({ title: "Erro", description: "Não foi possível carregar as mensagens.", variant: "destructive"});
     });
     return () => unsubscribe();
-  }, [activeChannel, toast, db]);
+  }, [activeChannel, toast]);
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -347,9 +346,11 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
   }, [messages]);
 
    const handleBotActionClick = async (actionId: string, customData?: any) => {
-        if (actionId === 'create-ticket') await handleCreateTicket();
-        else if (actionId === 'close-ticket' && activeChannel) setItemToManage({ type: 'channel', action: 'close', item: activeChannel });
-        else if (actionId === 'express_interest' && customData?.productName && userProfile && activeChannel) {
+        if (actionId === 'create-ticket') {
+            await handleCreateTicket();
+        } else if (actionId === 'close-ticket' && activeChannel) {
+            setItemToManage({ type: 'channel', action: 'close', item: activeChannel });
+        } else if (actionId === 'express_interest' && customData?.productName && userProfile && activeChannel) {
              const interestMessage = `Olá, tenho interesse na conversão do mapa ${customData.productName}. Poderiam me passar mais detalhes sobre o processo e orçamento?`;
              await addDoc(collection(db, 'chatChannels', activeChannel.id, 'messages'), {
                 text: interestMessage,
@@ -390,24 +391,24 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
         }
     };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newMessage.trim() === '' || !userProfile || !db || !activeChannel || [SUPPORT_CHANNEL_ID, SERVER_INFO_CHANNEL_ID].includes(activeChannel.id)) return;
-    if (activeChannel.isClosed) { toast({ title: "Ticket Fechado", description: "Não é possível enviar mensagens em um ticket finalizado.", variant: "destructive"}); return; }
-    try {
-      await addDoc(collection(db, 'chatChannels', activeChannel.id, 'messages'), {
-        text: newMessage,
-        user: { uid: userProfile.uid, name: userProfile.displayName, avatar: userProfile.photoURL, rank: userProfile.rank, isAdmin: userProfile.isAdmin },
-        createdAt: serverTimestamp(),
-        replyTo: replyingTo ? { messageId: replyingTo.id, text: replyingTo.text, authorName: replyingTo.user.name } : null,
-        reactions: {},
-      });
-      setNewMessage(''); setReplyingTo(null);
-    } catch (error) {
-      console.error("Error sending message:", error);
-      toast({ title: "Erro", description: "Não foi possível enviar a mensagem.", variant: "destructive" });
-    }
-  };
+    const handleSendMessage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (newMessage.trim() === '' || !userProfile || !db || !activeChannel || [SUPPORT_CHANNEL_ID, SERVER_INFO_CHANNEL_ID].includes(activeChannel.id)) return;
+        if (activeChannel.isClosed) { toast({ title: "Ticket Fechado", description: "Não é possível enviar mensagens em um ticket finalizado.", variant: "destructive"}); return; }
+        try {
+          await addDoc(collection(db, 'chatChannels', activeChannel.id, 'messages'), {
+            text: newMessage,
+            user: { uid: userProfile.uid, name: userProfile.displayName, avatar: userProfile.photoURL, rank: userProfile.rank, isAdmin: userProfile.isAdmin },
+            createdAt: serverTimestamp(),
+            replyTo: replyingTo ? { messageId: replyingTo.id, text: replyingTo.text, authorName: replyingTo.user.name } : null,
+            reactions: {},
+          });
+          setNewMessage(''); setReplyingTo(null);
+        } catch (error) {
+          console.error("Error sending message:", error);
+          toast({ title: "Erro", description: "Não foi possível enviar a mensagem.", variant: "destructive" });
+        }
+    };
 
     const handleDeleteMessage = async (messageId: string) => {
         if (!db || !activeChannel || [SUPPORT_CHANNEL_ID, SERVER_INFO_CHANNEL_ID].includes(activeChannel.id)) return;
@@ -661,7 +662,8 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
                        <div className="mt-1 flex flex-wrap gap-1">{Object.entries(msg.reactions).map(([emoji, uids]) => { if (uids.length === 0) return null; const userHasReacted = userProfile && uids.includes(userProfile.uid); return (<Button key={emoji} variant="outline" size="sm" className={cn("h-auto px-1.5 py-0.5 text-xs rounded-full border-accent/50 bg-accent/20 hover:bg-accent/40", userHasReacted && "border-primary bg-primary/20")} onClick={() => handleReaction(msg, emoji)}><span className="text-sm mr-1">{emoji}</span><span className="font-mono text-xs">{uids.length}</span></Button>);})}</div>
                      )}
                 </div>
-              </div>)})}
+              </div>);
+              }))}
             </div></ScrollArea>
         </div>
 

@@ -8,7 +8,7 @@ import MainContent from '@/components/layout/main-content';
 import ToolsContent from '@/components/layout/tools-content';
 import ShopContent from '@/components/layout/shop-content'; // Import ShopContent
 import ChatContent from '@/components/layout/chat-content';
-import AdminPanel from '@/components/admin/admin-panel';
+import AdminPanel from '@/components/layout/admin-panel';
 import SignUpForm from '@/components/auth/sign-up-form';
 import LevelUpModal from '@/components/ui/level-up-modal';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -370,9 +370,12 @@ export default function HomeClientPage() {
      router.push(`/tools/${toolId}`);
   };
   
-  const handleCreateSalesTicket = useCallback(() => {
+  const handleCreateSalesTicket = useCallback((mapType: 'GTA V' | 'GTA IV') => {
     setActiveTab('chat');
-    setTriggerSalesTicket(true);
+    // This is a simplified trigger. The actual ticket creation logic is in ChatContent.
+    // We'll pass the interest via a temporary state or a more robust context/state manager in a real app.
+    // For now, ChatContent will need a way to know this was triggered.
+    setTriggerSalesTicket(true); 
   }, []);
 
   const selectedLessonData = lessons.find(lesson => lesson.id === selectedLessonId);
