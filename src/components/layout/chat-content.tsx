@@ -19,6 +19,7 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle as AlertDialogTitleComponent,
+    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
     Select,
@@ -148,6 +149,8 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
     const { toast } = useToast();
 
     // State for modals
+    const [isChannelModalOpen, setIsChannelModalOpen] = useState(false);
+    const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
     const [editingChannel, setEditingChannel] = useState<{ categoryId: string, channel?: ChatChannel } | null>(null);
     const [editingCategory, setEditingCategory] = useState<ChatCategory | null>(null);
     const [itemToManage, setItemToManage] = useState<{ type: 'channel' | 'category' | 'multichannel', action: 'delete' | 'close', item: ChatChannel | ChatCategory | ChatChannel[] } | null>(null);
@@ -502,12 +505,14 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
         setEditingChannel(channel ? { categoryId: channel.categoryId, channel } : { categoryId: categoryId || '' });
         setChannelName(channel?.name || '');
         setSelectedCategoryId(channel?.categoryId || categoryId || '');
+        setIsChannelModalOpen(true);
     };
     const handleOpenCategoryModal = (category?: ChatCategory) => { 
         setEditingCategory(category || null); 
         setNewCategoryName(category?.name || ''); 
         setNewCategoryOrder(category?.order || categories.length + 1); 
-        setAllowedRanks(category?.allowedRanks || []); 
+        setAllowedRanks(category?.allowedRanks || []);
+        setIsCategoryModalOpen(true);
     };
     const handleSaveChannel = async () => {
         if (!channelName.trim() || !selectedCategoryId || !db) return;
@@ -524,6 +529,7 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
         } finally {
             setEditingChannel(null);
             setChannelName('');
+            setIsChannelModalOpen(false);
         }
     };
     const handleSaveCategory = async () => {
@@ -543,6 +549,7 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
             setNewCategoryName('');
             setNewCategoryOrder(0);
             setAllowedRanks([]);
+            setIsCategoryModalOpen(false);
         }
     };
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -595,13 +602,6 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
         }
     };
 
-    const handleDeleteSelectedChannels = () => {
-        const channelsToDelete = channels.filter(c => selectedChannels.includes(c.id));
-        if (channelsToDelete.length > 0) {
-            setItemToManage({ type: 'multichannel', action: 'delete', item: channelsToDelete });
-        }
-    };
-
   return (
     <div className="flex w-full bg-secondary/40 rounded-lg border border-border h-[calc(100vh-var(--header-height)-4rem)]">
       {/* Channel List Sidebar */}
@@ -615,12 +615,39 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
             )}
         </header>
         {selectedChannels.length > 0 && userProfile?.isAdmin && (
-                <div className="px-2 py-1 mb-2">
-                    <Button variant="destructive" size="sm" className="w-full" onClick={handleDeleteSelectedChannels}>
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Excluir ({selectedChannels.length})
-                    </Button>
-                </div>
+            <div className="px-2 py-1 mb-2">
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="destructive" size="sm" className="w-full">
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Excluir ({selectedChannels.length})
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitleComponent>Confirmar Exclusão</AlertDialogTitleComponent>
+                            <AlertDialogDescription>
+                                Tem certeza que quer excluir os {selectedChannels.length} canais selecionados? Esta ação não pode ser desfeita.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={() => {
+                                    const channelsToDelete = channels.filter(c => selectedChannels.includes(c.id));
+                                    if (channelsToDelete.length > 0) {
+                                        setItemToManage({ type: 'multichannel', action: 'delete', item: channelsToDelete });
+                                        handleConfirmManagementAction(); // Call it directly, as state is set now
+                                    }
+                                }}
+                                className="bg-destructive hover:bg-destructive/90"
+                            >
+                                Excluir
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            </div>
         )}
         <ScrollArea className="flex-1">
           {isLoading ? <div className="p-2 space-y-2"><div className="h-8 bg-muted rounded-md animate-pulse"></div><div className="h-6 bg-muted rounded-md animate-pulse ml-4"></div></div> : (
@@ -729,8 +756,35 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
       </div>
 
        {/* Modals */}
-       <Dialog open={!!editingChannel} onOpenChange={(open) => !open && setEditingChannel(null)}><DialogContent><DialogHeader><DialogTitle>{editingChannel?.channel ? 'Editar Canal' : 'Criar Novo Canal'}</DialogTitle></DialogHeader><div className="grid gap-4 py-4"><div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="channel-name" className="text-right">Nome</Label><Input id="channel-name" value={channelName} onChange={(e) => setChannelName(e.target.value)} className="col-span-3" placeholder="ex: geral"/></div><div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="channel-category" className="text-right">Categoria</Label><Select onValueChange={setSelectedCategoryId} value={selectedCategoryId}><SelectTrigger id="channel-category" className="col-span-3"><SelectValue placeholder="Selecione uma categoria" /></SelectTrigger><SelectContent>{categories.filter(c => ![SERVER_INFO_CATEGORY_ID, SUPPORT_CATEGORY_ID, TICKETS_CATEGORY_ID, TICKETS_ARCHIVED_CATEGORY_ID, SALES_CONSULTATION_CATEGORY_ID].includes(c.id)).map(category => (<SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>))}</SelectContent></Select></div></div><DialogFooter><Button type="button" variant="secondary" onClick={() => setEditingChannel(null)}>Cancelar</Button><Button type="button" onClick={handleSaveChannel}>Salvar</Button></DialogFooter></DialogContent></Dialog>
-       <Dialog open={!!editingCategory} onOpenChange={(open) => !open && setEditingCategory(null)}><DialogContent><DialogHeader><DialogTitle>{editingCategory ? 'Editar Categoria' : 'Criar Nova Categoria'}</DialogTitle></DialogHeader><div className="grid gap-4 py-4"><div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="category-name" className="text-right">Nome</Label><Input id="category-name" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} className="col-span-3" placeholder="ex: Geral"/></div><div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="category-order" className="text-right">Ordem</Label><Input id="category-order" type="number" value={newCategoryOrder} onChange={(e) => setNewCategoryOrder(Number(e.target.value))} className="col-span-3"/></div><div className="grid grid-cols-4 items-start gap-4"><Label className="text-right pt-2">Cargos</Label><div className="col-span-3 space-y-2"><p className="text-xs text-muted-foreground">Selecione quais cargos podem ver esta categoria. Deixe em branco para ser pública.</p>{rankKeys.map((rankKey) => (<div key={rankKey} className="flex items-center space-x-2"><Checkbox id={`rank-${rankKey}`} checked={allowedRanks.includes(rankKey)} onCheckedChange={(checked) => { setAllowedRanks(prev => checked ? [...prev, rankKey] : prev.filter(r => r !== rankKey)); }} /><label htmlFor={`rank-${rankKey}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">{ranks[rankKey]}</label></div>))}</div></div></div><DialogFooter><Button type="button" variant="secondary" onClick={() => setEditingCategory(null)}>Cancelar</Button><Button type="button" onClick={handleSaveCategory}>Salvar Categoria</Button></DialogFooter></DialogContent></Dialog>
+       <Dialog open={isChannelModalOpen} onOpenChange={(open) => { if (!open) { setEditingChannel(null); setIsChannelModalOpen(false); } }}>
+            <DialogContent>
+                <DialogHeader><DialogTitle>{editingChannel?.channel ? 'Editar Canal' : 'Criar Novo Canal'}</DialogTitle></DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="channel-name" className="text-right">Nome</Label><Input id="channel-name" value={channelName} onChange={(e) => setChannelName(e.target.value)} className="col-span-3" placeholder="ex: geral"/></div>
+                    <div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="channel-category" className="text-right">Categoria</Label><Select onValueChange={setSelectedCategoryId} value={selectedCategoryId}><SelectTrigger id="channel-category" className="col-span-3"><SelectValue placeholder="Selecione uma categoria" /></SelectTrigger><SelectContent>{categories.filter(c => ![SERVER_INFO_CATEGORY_ID, SUPPORT_CATEGORY_ID, TICKETS_CATEGORY_ID, TICKETS_ARCHIVED_CATEGORY_ID, SALES_CONSULTATION_CATEGORY_ID].includes(c.id)).map(category => (<SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>))}</SelectContent></Select></div>
+                </div>
+                <DialogFooter>
+                    <Button type="button" variant="secondary" onClick={() => { setEditingChannel(null); setIsChannelModalOpen(false); }}>Cancelar</Button>
+                    <Button type="button" onClick={handleSaveChannel}>Salvar</Button>
+                </DialogFooter>
+            </DialogContent>
+       </Dialog>
+       
+       <Dialog open={isCategoryModalOpen} onOpenChange={(open) => { if (!open) { setEditingCategory(null); setIsCategoryModalOpen(false); } }}>
+            <DialogContent>
+                <DialogHeader><DialogTitle>{editingCategory ? 'Editar Categoria' : 'Criar Nova Categoria'}</DialogTitle></DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="category-name" className="text-right">Nome</Label><Input id="category-name" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} className="col-span-3" placeholder="ex: Geral"/></div>
+                    <div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="category-order" className="text-right">Ordem</Label><Input id="category-order" type="number" value={newCategoryOrder} onChange={(e) => setNewCategoryOrder(Number(e.target.value))} className="col-span-3"/></div>
+                    <div className="grid grid-cols-4 items-start gap-4"><Label className="text-right pt-2">Cargos</Label><div className="col-span-3 space-y-2"><p className="text-xs text-muted-foreground">Selecione quais cargos podem ver esta categoria. Deixe em branco para ser pública.</p>{rankKeys.map((rankKey) => (<div key={rankKey} className="flex items-center space-x-2"><Checkbox id={`rank-${rankKey}`} checked={allowedRanks.includes(rankKey)} onCheckedChange={(checked) => { setAllowedRanks(prev => checked ? [...prev, rankKey] : prev.filter(r => r !== rankKey)); }} /><label htmlFor={`rank-${rankKey}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">{ranks[rankKey]}</label></div>))}</div></div>
+                </div>
+                <DialogFooter>
+                    <Button type="button" variant="secondary" onClick={() => { setEditingCategory(null); setIsCategoryModalOpen(false); }}>Cancelar</Button>
+                    <Button type="button" onClick={handleSaveCategory}>Salvar Categoria</Button>
+                </DialogFooter>
+            </DialogContent>
+       </Dialog>
+       
        <AlertDialog open={!!itemToManage} onOpenChange={(open) => !open && setItemToManage(null)}>
         <AlertDialogContent>
             <AlertDialogHeader>
