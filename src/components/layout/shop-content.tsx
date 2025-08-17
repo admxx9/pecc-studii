@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -14,6 +15,16 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import * as LucideIcons from 'lucide-react';
+
+export interface QuoteService {
+    id: string;
+    title: string;
+    description: string;
+    icon: keyof typeof LucideIcons;
+    createdAt?: any;
+}
+
 
 interface ShopContentProps {
   onServiceRequest: (type: 'quote' | 'purchase', details: string) => void;
@@ -94,33 +105,42 @@ const ItemsGrid = ({ items, isLoading, onPurchaseClick }: { items: Tool[], isLoa
 
 export default function ShopContent({ onServiceRequest }: ShopContentProps) {
   const [storeItems, setStoreItems] = useState<Tool[]>([]);
+  const [quoteServices, setQuoteServices] = useState<QuoteService[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
-  // Fetch all store items once on component mount
+  // Fetch all store items and quote services
   useEffect(() => {
-    const fetchItems = async () => {
+    const fetchContent = async () => {
       if (!db) {
         setIsLoading(false);
         return;
       }
       setIsLoading(true);
       try {
+        // Fetch Store Items
         const itemsQuery = query(
           collection(db, 'tools'),
           where('category', '==', 'loja'),
           orderBy('createdAt', 'desc')
         );
-        const querySnapshot = await getDocs(itemsQuery);
-        const fetchedItems = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Tool));
+        const itemsSnapshot = await getDocs(itemsQuery);
+        const fetchedItems = itemsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Tool));
         setStoreItems(fetchedItems);
+
+        // Fetch Quote Services
+        const quotesQuery = query(collection(db, 'quoteServices'), orderBy('createdAt', 'asc'));
+        const quotesSnapshot = await getDocs(quotesQuery);
+        const fetchedQuotes = quotesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as QuoteService));
+        setQuoteServices(fetchedQuotes);
+
       } catch (error) {
-        console.error("Error fetching store items:", error);
+        console.error("Error fetching shop content:", error);
       } finally {
         setIsLoading(false);
       }
     };
-    fetchItems();
+    fetchContent();
   }, []);
   
   // Filter items based on tags for different tabs
@@ -131,8 +151,13 @@ export default function ShopContent({ onServiceRequest }: ShopContentProps) {
     onServiceRequest('purchase', itemName);
   };
   
-  const handleQuoteClick = (mapType: 'GTA V' | 'GTA IV') => {
-      onServiceRequest('quote', mapType);
+  const handleQuoteClick = (serviceTitle: string) => {
+      onServiceRequest('quote', serviceTitle);
+  };
+
+  const getIcon = (iconName: keyof typeof LucideIcons) => {
+    const Icon = LucideIcons[iconName];
+    return Icon ? <Icon className="w-10 h-10 mb-4 text-primary" /> : <Bot className="w-10 h-10 mb-4 text-primary"/>;
   };
 
   return (
@@ -153,45 +178,33 @@ export default function ShopContent({ onServiceRequest }: ShopContentProps) {
          </TabsContent>
 
          <TabsContent value="quotes">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-                <Card className="flex flex-col bg-card border rounded-lg shadow-sm overflow-hidden">
-                    <CardHeader>
-                        <CardTitle>Conversão de Mapa: GTA V</CardTitle>
-                        <CardDescription className="text-muted-foreground">
-                            A vasta e detalhada Los Santos ao seu alcance. Oferecemos uma conversão de alta fidelidade, otimizada para performance e pronta para ser explorada no seu servidor.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardFooter className="mt-auto">
-                         <Button className="w-full" onClick={() => handleQuoteClick('GTA V')}>
-                            <Bot className="mr-2 h-4 w-4" /> Solicitar Orçamento
-                         </Button>
-                    </CardFooter>
-                </Card>
-                <Card className="flex flex-col bg-card border rounded-lg shadow-sm overflow-hidden">
-                    <CardHeader>
-                        <CardTitle>Conversão de Mapa: GTA IV</CardTitle>
-                        <CardDescription className="text-muted-foreground">
-                            A atmosfera densa e o design complexo de Liberty City. Ideal para projetos que buscam uma ambientação urbana única e imersiva.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardFooter className="mt-auto">
-                         <Button className="w-full" onClick={() => handleQuoteClick('GTA IV')}>
-                             <Bot className="mr-2 h-4 w-4" /> Solicitar Orçamento
-                         </Button>
-                    </CardFooter>
-                </Card>
-            </div>
+            {isLoading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+                    <Skeleton className="h-64 w-full" />
+                    <Skeleton className="h-64 w-full" />
+                </div>
+             ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+                    {quoteServices.map(service => (
+                         <Card key={service.id} className="flex flex-col bg-card border rounded-lg shadow-sm overflow-hidden text-center items-center p-6">
+                            <CardHeader>
+                                {getIcon(service.icon)}
+                                <CardTitle>{service.title}</CardTitle>
+                                <CardDescription className="text-muted-foreground pt-2">
+                                    {service.description}
+                                </CardDescription>
+                            </CardHeader>
+                            <CardFooter className="mt-auto">
+                                <Button className="w-full" onClick={() => handleQuoteClick(service.title)}>
+                                    <Bot className="mr-2 h-4 w-4" /> Solicitar Orçamento
+                                </Button>
+                            </CardFooter>
+                        </Card>
+                    ))}
+                </div>
+            )}
          </TabsContent>
        </Tabs>
-
-       <style jsx global>{`
-        .bg-grid-pattern {
-          background-image:
-            linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px),
-            linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px);
-          background-size: 2rem 2rem;
-        }
-      `}</style>
     </div>
   );
 }

@@ -4,7 +4,7 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Users, Settings, ArrowLeft, Wrench, BookOpen, Pencil, Bell, Ticket } from 'lucide-react'; // Added Bell, Ticket icons
+import { Plus, Users, Settings, ArrowLeft, Wrench, BookOpen, Pencil, Bell, Ticket, ClipboardList } from 'lucide-react'; // Added Bell, Ticket, ClipboardList icons
 import AddLessonForm from '@/components/admin/add-lesson-form';
 import ManageUsers from '@/components/admin/manage-users';
 import AddToolForm from '@/components/admin/add-tool-form';
@@ -12,15 +12,19 @@ import ManageToolsList from '@/components/admin/manage-tools-list';
 import EditToolForm from '@/components/admin/edit-tool-form';
 import ManageLessonsList from '@/components/admin/manage-lessons-list';
 import EditLessonForm from '@/components/admin/edit-lesson-form';
-import NotificationSender from '@/components/admin/notification-sender'; // Import NotificationSender
-import ManageCodes from '@/components/admin/manage-codes'; // Import ManageCodes
-import SettingsPanel from '@/components/admin/settings-panel'; // Import SettingsPanel
+import NotificationSender from '@/components/admin/notification-sender';
+import ManageCodes from '@/components/admin/manage-codes';
+import SettingsPanel from '@/components/admin/settings-panel';
 import type { Tool } from '@/components/layout/tools-content';
 import type { Lesson } from '@/components/page/home-client-page';
+import AddQuoteServiceForm from '@/components/admin/add-quote-service-form';
+import ManageQuoteServicesList from '@/components/admin/manage-quote-services-list';
+import EditQuoteServiceForm from '@/components/admin/edit-quote-service-form';
+import type { QuoteService } from '@/components/layout/shop-content';
 
 
-// Add 'manage-codes' to the section types
-type AdminSection = 'overview' | 'add-lesson' | 'manage-users' | 'add-tool' | 'manage-tools' | 'manage-lessons' | 'edit-lesson' | 'edit-tool' | 'settings' | 'manage-codes' | 'server-settings';
+// Add 'manage-codes' and quote sections to the section types
+type AdminSection = 'overview' | 'add-lesson' | 'manage-users' | 'add-tool' | 'manage-tools' | 'manage-lessons' | 'edit-lesson' | 'edit-tool' | 'settings' | 'manage-codes' | 'server-settings' | 'manage-quotes' | 'add-quote' | 'edit-quote';
 
 
 const AdminPanel = () => {
@@ -28,6 +32,7 @@ const AdminPanel = () => {
   const [activeSection, setActiveSection] = useState<AdminSection>('overview');
   const [toolToEdit, setToolToEdit] = useState<Tool | null>(null);
   const [lessonToEdit, setLessonToEdit] = useState<Lesson | null>(null);
+  const [quoteToEdit, setQuoteToEdit] = useState<QuoteService | null>(null);
 
 
    const handleEditTool = (tool: Tool) => {
@@ -40,6 +45,12 @@ const AdminPanel = () => {
         console.log("Setting lesson to edit:", lesson);
         setLessonToEdit(lesson);
         setActiveSection('edit-lesson');
+    };
+
+    const handleEditQuote = (quote: QuoteService) => {
+        console.log("Setting quote to edit:", quote);
+        setQuoteToEdit(quote);
+        setActiveSection('edit-quote');
     };
 
 
@@ -86,7 +97,21 @@ const AdminPanel = () => {
             Gerenciar
           </Button>
         </Card>
-         {/* New Card for Managing Codes */}
+        <Card className="bg-secondary border-border p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between rounded-md shadow-sm hover:shadow-lg transition-shadow duration-200">
+            <div className="flex-1 mr-4 mb-2 sm:mb-0">
+                <h3 className="text-lg font-medium text-foreground">Gerenciar Orçamentos</h3>
+                <p className="text-sm text-muted-foreground mt-1">Adicione ou edite serviços de orçamento.</p>
+            </div>
+            <Button
+                variant="outline"
+                size="sm"
+                className="hover:bg-primary hover:text-primary-foreground transition-colors w-full sm:w-auto"
+                onClick={() => setActiveSection('manage-quotes')}
+            >
+                <ClipboardList className="mr-2 h-4 w-4" />
+                Gerenciar Orçamentos
+            </Button>
+        </Card>
          <Card className="bg-secondary border-border p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between rounded-md shadow-sm hover:shadow-lg transition-shadow duration-200">
           <div className="flex-1 mr-4 mb-2 sm:mb-0">
             <h3 className="text-lg font-medium text-foreground">Gerenciar Códigos Premium</h3>
@@ -144,10 +169,14 @@ const AdminPanel = () => {
              case 'add-lesson':
             case 'edit-lesson':
                  return 'manage-lessons';
+            case 'add-quote':
+            case 'edit-quote':
+                return 'manage-quotes';
             case 'manage-users':
             case 'settings':
             case 'manage-codes': // Back from manage-codes goes to overview
             case 'server-settings':
+            case 'manage-quotes':
                  return 'overview';
             default:
                 return 'overview';
@@ -170,6 +199,9 @@ const AdminPanel = () => {
                  {activeSection === 'manage-tools' && <><Wrench className="h-5 w-5" /> Gerenciar Ferramentas</>}
                  {activeSection === 'add-tool' && <><Plus className="h-5 w-5" /> Adicionar Nova Ferramenta</>}
                  {activeSection === 'edit-tool' && <><Pencil className="h-5 w-5" /> Editar Ferramenta</>}
+                 {activeSection === 'manage-quotes' && <><ClipboardList className="h-5 w-5" /> Gerenciar Serviços de Orçamento</>}
+                 {activeSection === 'add-quote' && <><Plus className="h-5 w-5" /> Adicionar Serviço de Orçamento</>}
+                 {activeSection === 'edit-quote' && <><Pencil className="h-5 w-5" /> Editar Serviço de Orçamento</>}
                  {activeSection === 'settings' && <><Bell className="h-5 w-5" /> Enviar Notificação</>}
                  {activeSection === 'manage-codes' && <><Ticket className="h-5 w-5" /> Gerenciar Códigos Premium</>}
                  {activeSection === 'server-settings' && <><Settings className="h-5 w-5" /> Configurações do Servidor</>}
@@ -184,6 +216,9 @@ const AdminPanel = () => {
                  {activeSection === 'manage-tools' && 'Visualize, adicione, edite ou remova ferramentas.'}
                  {activeSection === 'add-tool' && 'Preencha os detalhes da nova ferramenta de modding.'}
                  {activeSection === 'edit-tool' && `Editando: ${toolToEdit?.name || 'Ferramenta'}`}
+                 {activeSection === 'manage-quotes' && 'Adicione, edite ou remova os serviços de orçamento oferecidos na loja.'}
+                 {activeSection === 'add-quote' && 'Preencha os detalhes do novo serviço de orçamento.'}
+                 {activeSection === 'edit-quote' && `Editando: ${quoteToEdit?.title || 'Serviço'}`}
                  {activeSection === 'settings' && 'Escreva e envie notificações para os usuários.'}
                  {activeSection === 'manage-codes' && 'Gere, visualize e monitore o uso de códigos premium.'}
                  {activeSection === 'server-settings' && 'Ative o modo de manutenção e personalize a mensagem.'}
@@ -229,6 +264,21 @@ const AdminPanel = () => {
                 <EditToolForm
                     setSection={setActiveSection}
                     tool={toolToEdit}
+                />
+            )}
+
+             {/* Quote Service Management */}
+            {activeSection === 'manage-quotes' && (
+                <ManageQuoteServicesList
+                    setSection={setActiveSection}
+                    onEditQuote={handleEditQuote}
+                />
+            )}
+            {activeSection === 'add-quote' && <AddQuoteServiceForm setSection={setActiveSection} />}
+            {activeSection === 'edit-quote' && quoteToEdit && (
+                <EditQuoteServiceForm
+                    setSection={setActiveSection}
+                    quoteService={quoteToEdit}
                 />
             )}
 
