@@ -137,19 +137,6 @@ export default function ShopContent({ onServiceRequest }: ShopContentProps) {
 
   return (
     <div className="flex-1 container mx-auto py-8 md:py-12 px-4 sm:px-6 lg:px-8">
-      {/* Hero Section */}
-      <div className="relative bg-card border border-border rounded-lg overflow-hidden mb-8 p-6 md:p-8 text-center flex flex-col items-center">
-         <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
-         <div className="relative z-10">
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-2">
-              Loja & Serviços
-            </h2>
-            <p className="text-md text-muted-foreground max-w-2xl mx-auto">
-              Encontre assets, mapas e ferramentas ou solicite um serviço de conversão.
-            </p>
-         </div>
-      </div>
-      
        <Tabs defaultValue="ready-maps" className="w-full">
          <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 mb-8">
             <TabsTrigger value="ready-maps">Mapas Prontos</TabsTrigger>
