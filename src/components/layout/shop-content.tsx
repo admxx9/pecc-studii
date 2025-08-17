@@ -13,130 +13,35 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface ShopContentProps {
   onServiceRequest: (type: 'quote' | 'purchase', details: string) => void;
 }
 
-export default function ShopContent({ onServiceRequest }: ShopContentProps) {
-  const [items, setItems] = useState<Tool[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [activeTags, setActiveTags] = useState<string[]>([]);
-  const router = useRouter();
-
-  // Fetch store items from Firestore
-  useEffect(() => {
-    const fetchItems = async () => {
-      if (!db) {
-        setIsLoading(false);
-        return;
-      }
-      setIsLoading(true);
-      try {
-        const itemsQuery = query(
-          collection(db, 'tools'),
-          where('category', '==', 'loja'),
-          orderBy('createdAt', 'desc')
-        );
-        const querySnapshot = await getDocs(itemsQuery);
-        const fetchedItems = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Tool));
-        setItems(fetchedItems);
-      } catch (error) {
-        console.error("Error fetching store items:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchItems();
-  }, []);
-  
-  const allTags = useMemo(() => {
-    const tagsSet = new Set<string>();
-    items.forEach(item => item.tags?.forEach(tag => tagsSet.add(tag)));
-    return Array.from(tagsSet).sort();
-  }, [items]);
-
-  const filteredItems = useMemo(() => {
-    return items.filter(item => {
-      const searchMatch = searchTerm === '' ||
-        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.description.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const tagsMatch = activeTags.length === 0 ||
-        activeTags.every(tag => item.tags?.includes(tag));
-      
-      return searchMatch && tagsMatch;
-    });
-  }, [items, searchTerm, activeTags]);
-
-  const handleTagClick = (tag: string) => {
-    setActiveTags(prev => 
-        prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-    );
-  };
-
-  const handlePurchaseClick = (itemName: string) => {
-    onServiceRequest('purchase', itemName);
-  };
-  
-  const handleQuoteClick = (mapType: 'GTA V' | 'GTA IV') => {
-      onServiceRequest('quote', mapType);
-  };
-
-  return (
-    <div className="flex-1 container mx-auto py-8 md:py-12 px-4 sm:px-6 lg:px-8">
-      {/* Hero Section - Reduced Size */}
-      <div className="relative bg-card border border-border rounded-lg overflow-hidden mb-8 p-6 md:p-8 text-center flex flex-col items-center">
-         <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
-         <div className="relative z-10">
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-2">
-              Loja & Serviços
-            </h2>
-            <p className="text-md text-muted-foreground max-w-2xl mx-auto">
-              Encontre assets, mapas e ferramentas ou solicite um serviço de conversão.
-            </p>
-         </div>
-      </div>
-
-       {/* Filters Section */}
-      <div id="store-items" className="mb-8 p-4 bg-secondary/50 rounded-lg border">
-         <div className="flex flex-col md:flex-row gap-4">
-             <div className="relative flex-1">
-                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                 <Input 
-                    placeholder="Buscar produtos na loja..."
-                    className="pl-10 h-11"
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                />
-             </div>
-             <div className="flex items-center gap-2 flex-wrap">
-                <Tag className="h-5 w-5 text-muted-foreground"/>
-                 {allTags.length > 0 ? allTags.map(tag => (
-                    <Button key={tag} variant={activeTags.includes(tag) ? 'default' : 'outline'} size="sm" onClick={() => handleTagClick(tag)} className="capitalize text-xs h-9">
-                        {tag}
-                    </Button>
-                 )) : <p className="text-sm text-muted-foreground">Sem tags para filtrar.</p>}
-             </div>
-         </div>
-      </div>
-
-      {/* Items Grid */}
-      <section className="mb-12">
-        {isLoading ? (
+// Reusable component to render a grid of items
+const ItemsGrid = ({ items, isLoading, onPurchaseClick }: { items: Tool[], isLoading: boolean, onPurchaseClick: (itemName: string) => void }) => {
+    if (isLoading) {
+        return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-96 w-full" />)}
             </div>
-        ) : filteredItems.length === 0 ? (
+        );
+    }
+
+    if (items.length === 0) {
+        return (
             <div className="text-center py-16 bg-secondary/30 rounded-lg">
                 <ShoppingCart className="mx-auto h-12 w-12 text-muted-foreground" />
                 <h3 className="mt-4 text-lg font-semibold text-foreground">Nenhum produto encontrado</h3>
-                <p className="mt-1 text-sm text-muted-foreground">Tente ajustar seus filtros de busca ou volte mais tarde.</p>
+                <p className="mt-1 text-sm text-muted-foreground">Não há itens nesta categoria no momento.</p>
             </div>
-        ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {filteredItems.map(item => (
+        );
+    }
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {items.map(item => (
               <Card 
                 key={item.id} 
                 className="flex flex-col bg-card border rounded-lg shadow-sm overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
@@ -175,20 +80,92 @@ export default function ShopContent({ onServiceRequest }: ShopContentProps) {
                        )}
                   </CardContent>
                    <CardFooter className="p-4 pt-0">
-                       <Button className="w-full" variant="outline" onClick={() => handlePurchaseClick(item.name)}>
+                       <Button className="w-full" variant="outline" onClick={() => onPurchaseClick(item.name)}>
                            <ShoppingCart className="mr-2 h-4 w-4" />
                            Tenho Interesse
                        </Button>
                    </CardFooter>
               </Card>
             ))}
-            </div>
-        )}
-      </section>
+        </div>
+    );
+};
 
-      {/* Services Section */}
-       <section>
-            <h3 className="text-2xl font-bold text-center text-foreground mb-8">Serviços Exclusivos</h3>
+
+export default function ShopContent({ onServiceRequest }: ShopContentProps) {
+  const [storeItems, setStoreItems] = useState<Tool[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+
+  // Fetch all store items once on component mount
+  useEffect(() => {
+    const fetchItems = async () => {
+      if (!db) {
+        setIsLoading(false);
+        return;
+      }
+      setIsLoading(true);
+      try {
+        const itemsQuery = query(
+          collection(db, 'tools'),
+          where('category', '==', 'loja'),
+          orderBy('createdAt', 'desc')
+        );
+        const querySnapshot = await getDocs(itemsQuery);
+        const fetchedItems = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Tool));
+        setStoreItems(fetchedItems);
+      } catch (error) {
+        console.error("Error fetching store items:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchItems();
+  }, []);
+  
+  // Filter items based on tags for different tabs
+  const readyMaps = useMemo(() => storeItems.filter(item => item.tags?.includes('mapa')), [storeItems]);
+  const favelas = useMemo(() => storeItems.filter(item => item.tags?.includes('favela')), [storeItems]);
+
+  const handlePurchaseClick = (itemName: string) => {
+    onServiceRequest('purchase', itemName);
+  };
+  
+  const handleQuoteClick = (mapType: 'GTA V' | 'GTA IV') => {
+      onServiceRequest('quote', mapType);
+  };
+
+  return (
+    <div className="flex-1 container mx-auto py-8 md:py-12 px-4 sm:px-6 lg:px-8">
+      {/* Hero Section */}
+      <div className="relative bg-card border border-border rounded-lg overflow-hidden mb-8 p-6 md:p-8 text-center flex flex-col items-center">
+         <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
+         <div className="relative z-10">
+            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-2">
+              Loja & Serviços
+            </h2>
+            <p className="text-md text-muted-foreground max-w-2xl mx-auto">
+              Encontre assets, mapas e ferramentas ou solicite um serviço de conversão.
+            </p>
+         </div>
+      </div>
+      
+       <Tabs defaultValue="ready-maps" className="w-full">
+         <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 mb-8">
+            <TabsTrigger value="ready-maps">Mapas Prontos</TabsTrigger>
+            <TabsTrigger value="favelas">Favelas</TabsTrigger>
+            <TabsTrigger value="quotes">Orçamentos de Mapas</TabsTrigger>
+         </TabsList>
+         
+         <TabsContent value="ready-maps">
+            <ItemsGrid items={readyMaps} isLoading={isLoading} onPurchaseClick={handlePurchaseClick} />
+         </TabsContent>
+         
+         <TabsContent value="favelas">
+            <ItemsGrid items={favelas} isLoading={isLoading} onPurchaseClick={handlePurchaseClick} />
+         </TabsContent>
+
+         <TabsContent value="quotes">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
                 <Card className="flex flex-col bg-card border rounded-lg shadow-sm overflow-hidden">
                     <CardHeader>
@@ -217,7 +194,8 @@ export default function ShopContent({ onServiceRequest }: ShopContentProps) {
                     </CardFooter>
                 </Card>
             </div>
-       </section>
+         </TabsContent>
+       </Tabs>
 
        <style jsx global>{`
         .bg-grid-pattern {
