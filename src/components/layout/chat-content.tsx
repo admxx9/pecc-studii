@@ -150,7 +150,7 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
     // State for modals
     const [editingChannel, setEditingChannel] = useState<{ categoryId: string, channel?: ChatChannel } | null>(null);
     const [editingCategory, setEditingCategory] = useState<ChatCategory | null>(null);
-    const [itemToManage, setItemToManage] = useState<{ type: 'channel' | 'category', action: 'delete' | 'close', item: ChatChannel | ChatCategory } | null>(null);
+    const [itemToManage, setItemToManage] = useState<{ type: 'channel' | 'category' | 'multichannel', action: 'delete' | 'close', item: ChatChannel | ChatCategory | ChatChannel[] } | null>(null);
 
     // Form state for modals
     const [channelName, setChannelName] = useState('');
@@ -158,6 +158,9 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
     const [newCategoryName, setNewCategoryName] = useState('');
     const [newCategoryOrder, setNewCategoryOrder] = useState(0);
     const [allowedRanks, setAllowedRanks] = useState<string[]>([]);
+    
+    // State for multi-selection
+    const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
     
     const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
     const [mentionQuery, setMentionQuery] = useState('');
@@ -309,6 +312,9 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
         ];
 
         const finalVisibleCategories = allPossibleCategories.filter(cat => {
+            if (cat.id === TICKETS_ARCHIVED_CATEGORY_ID) {
+                return userProfile.isAdmin && hasChannelInCategory(cat.id);
+            }
             if (cat.id === SUPPORT_CATEGORY_ID) return !hasOpenTicket;
             return hasChannelInCategory(cat.id);
         }).sort((a,b) => a.order - b.order);
@@ -454,6 +460,18 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
                 batch.delete(doc(db, 'chatCategories', category.id));
                 await batch.commit();
                 toast({ title: "Categoria Excluída", description: `A categoria ${category.name} e seus canais foram removidos.` });
+            } else if (type === 'multichannel' && action === 'delete') {
+                const channelsToDelete = item as ChatChannel[];
+                const batch = writeBatch(db);
+                channelsToDelete.forEach(c => {
+                    batch.delete(doc(db, 'chatChannels', c.id));
+                });
+                await batch.commit();
+                toast({ title: `${channelsToDelete.length} canais excluídos`, description: "Os canais selecionados foram removidos." });
+                if (selectedChannels.includes(activeChannelId || '')) {
+                    setActiveChannelId(serverInfoChannel.id);
+                }
+                setSelectedChannels([]);
             }
         } catch (error) {
              console.error(`Error during '${action}' on ${type}:`, error);
@@ -564,6 +582,26 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
         return <Icon className="h-4 w-4 ml-1.5" />;
     };
 
+    const handleChannelClick = (e: React.MouseEvent, channelId: string) => {
+        if (e.ctrlKey) {
+            setSelectedChannels(prev =>
+                prev.includes(channelId)
+                    ? prev.filter(id => id !== channelId)
+                    : [...prev, channelId]
+            );
+        } else {
+            setActiveChannelId(channelId);
+            setSelectedChannels([]);
+        }
+    };
+
+    const handleDeleteSelectedChannels = () => {
+        const channelsToDelete = channels.filter(c => selectedChannels.includes(c.id));
+        if (channelsToDelete.length > 0) {
+            setItemToManage({ type: 'multichannel', action: 'delete', item: channelsToDelete });
+        }
+    };
+
   return (
     <div className="flex w-full bg-secondary/40 rounded-lg border border-border h-[calc(100vh-var(--header-height)-4rem)]">
       {/* Channel List Sidebar */}
@@ -576,6 +614,14 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
                 </Popover>
             )}
         </header>
+        {selectedChannels.length > 0 && userProfile?.isAdmin && (
+                <div className="px-2 py-1 mb-2">
+                    <Button variant="destructive" size="sm" className="w-full" onClick={handleDeleteSelectedChannels}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Excluir ({selectedChannels.length})
+                    </Button>
+                </div>
+        )}
         <ScrollArea className="flex-1">
           {isLoading ? <div className="p-2 space-y-2"><div className="h-8 bg-muted rounded-md animate-pulse"></div><div className="h-6 bg-muted rounded-md animate-pulse ml-4"></div></div> : (
             <Accordion type="multiple" defaultValue={visibleCategories.map(c => c.id)} className="w-full">
@@ -589,7 +635,14 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
                             {visibleChannels.filter(c => c.categoryId === category.id).map(channel => (
                                 <ContextMenu key={channel.id}>
                                     <ContextMenuTrigger disabled={!userProfile?.isAdmin || [SERVER_INFO_CHANNEL_ID, SUPPORT_CHANNEL_ID].includes(channel.id) || channel.isClosed}>
-                                        <Button variant="ghost" onClick={() => setActiveChannelId(channel.id)} className={cn('w-full justify-start text-muted-foreground', activeChannel?.id === channel.id && 'bg-accent text-accent-foreground')}>
+                                        <Button 
+                                            variant="ghost" 
+                                            onClick={(e) => handleChannelClick(e, channel.id)}
+                                            className={cn('w-full justify-start text-muted-foreground', 
+                                                activeChannel?.id === channel.id && 'bg-accent text-accent-foreground',
+                                                selectedChannels.includes(channel.id) && 'bg-primary/20 text-primary-foreground'
+                                            )}
+                                        >
                                             {channel.isPrivate ? <Lock className="mr-2 h-4 w-4" /> : channel.categoryId === SERVER_INFO_CATEGORY_ID ? <BookOpen className="mr-2 h-4 w-4" /> : <Hash className="mr-2 h-4 w-4" />}
                                             <span className="truncate">{channel.name}</span>
                                         </Button>
@@ -678,7 +731,22 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
        {/* Modals */}
        <Dialog open={!!editingChannel} onOpenChange={(open) => !open && setEditingChannel(null)}><DialogContent><DialogHeader><DialogTitle>{editingChannel?.channel ? 'Editar Canal' : 'Criar Novo Canal'}</DialogTitle></DialogHeader><div className="grid gap-4 py-4"><div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="channel-name" className="text-right">Nome</Label><Input id="channel-name" value={channelName} onChange={(e) => setChannelName(e.target.value)} className="col-span-3" placeholder="ex: geral"/></div><div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="channel-category" className="text-right">Categoria</Label><Select onValueChange={setSelectedCategoryId} value={selectedCategoryId}><SelectTrigger id="channel-category" className="col-span-3"><SelectValue placeholder="Selecione uma categoria" /></SelectTrigger><SelectContent>{categories.filter(c => ![SERVER_INFO_CATEGORY_ID, SUPPORT_CATEGORY_ID, TICKETS_CATEGORY_ID, TICKETS_ARCHIVED_CATEGORY_ID, SALES_CONSULTATION_CATEGORY_ID].includes(c.id)).map(category => (<SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>))}</SelectContent></Select></div></div><DialogFooter><Button type="button" variant="secondary" onClick={() => setEditingChannel(null)}>Cancelar</Button><Button type="button" onClick={handleSaveChannel}>Salvar</Button></DialogFooter></DialogContent></Dialog>
        <Dialog open={!!editingCategory} onOpenChange={(open) => !open && setEditingCategory(null)}><DialogContent><DialogHeader><DialogTitle>{editingCategory ? 'Editar Categoria' : 'Criar Nova Categoria'}</DialogTitle></DialogHeader><div className="grid gap-4 py-4"><div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="category-name" className="text-right">Nome</Label><Input id="category-name" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} className="col-span-3" placeholder="ex: Geral"/></div><div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="category-order" className="text-right">Ordem</Label><Input id="category-order" type="number" value={newCategoryOrder} onChange={(e) => setNewCategoryOrder(Number(e.target.value))} className="col-span-3"/></div><div className="grid grid-cols-4 items-start gap-4"><Label className="text-right pt-2">Cargos</Label><div className="col-span-3 space-y-2"><p className="text-xs text-muted-foreground">Selecione quais cargos podem ver esta categoria. Deixe em branco para ser pública.</p>{rankKeys.map((rankKey) => (<div key={rankKey} className="flex items-center space-x-2"><Checkbox id={`rank-${rankKey}`} checked={allowedRanks.includes(rankKey)} onCheckedChange={(checked) => { setAllowedRanks(prev => checked ? [...prev, rankKey] : prev.filter(r => r !== rankKey)); }} /><label htmlFor={`rank-${rankKey}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">{ranks[rankKey]}</label></div>))}</div></div></div><DialogFooter><Button type="button" variant="secondary" onClick={() => setEditingCategory(null)}>Cancelar</Button><Button type="button" onClick={handleSaveCategory}>Salvar Categoria</Button></DialogFooter></DialogContent></Dialog>
-       <AlertDialog open={!!itemToManage} onOpenChange={(open) => !open && setItemToManage(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitleComponent>Confirmar Ação</AlertDialogTitleComponent><AlertDialogDescription>{itemToManage?.action === 'delete' && `Tem certeza que quer excluir? Esta ação não pode ser desfeita.`}{itemToManage?.action === 'close' && `Tem certeza que quer encerrar este ticket? Ele será arquivado e não poderá mais receber mensagens.`}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel onClick={() => setItemToManage(null)}>Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleConfirmManagementAction} className="bg-destructive hover:bg-destructive/90">{itemToManage?.action === 'delete' ? 'Excluir' : 'Encerrar Ticket'}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+       <AlertDialog open={!!itemToManage} onOpenChange={(open) => !open && setItemToManage(null)}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitleComponent>Confirmar Ação</AlertDialogTitleComponent>
+                <AlertDialogDescription>
+                    {itemToManage?.action === 'delete' && itemToManage.type === 'multichannel' && `Tem certeza que quer excluir os ${ (itemToManage.item as ChatChannel[]).length } canais selecionados? Esta ação não pode ser desfeita.`}
+                    {itemToManage?.action === 'delete' && itemToManage.type !== 'multichannel' && `Tem certeza que quer excluir? Esta ação não pode ser desfeita.`}
+                    {itemToManage?.action === 'close' && `Tem certeza que quer encerrar este ticket? Ele será arquivado e não poderá mais receber mensagens.`}
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setItemToManage(null)}>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={handleConfirmManagementAction} className="bg-destructive hover:bg-destructive/90">{itemToManage?.action === 'delete' ? 'Excluir' : 'Encerrar Ticket'}</AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+       </AlertDialog>
     </div>
   );
 }
