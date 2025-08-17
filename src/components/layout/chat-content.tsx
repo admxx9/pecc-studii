@@ -461,9 +461,15 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
         }
     };
     
-    const handleCopyText = (text: string) => navigator.clipboard.writeText(text).then(() => toast({ title: "Texto copiado!" }));
-    const handleReplyClick = (message: ChatMessage) => { if(!message.isBotMessage){ setReplyingTo(message); inputRef.current?.focus(); }};
-    const formatDate = (timestamp: Timestamp | null | undefined): string => timestamp?.toDate() ? timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    const handleCopyText = (text: string) => {
+        navigator.clipboard.writeText(text).then(() => toast({ title: "Texto copiado!" }));
+    };
+    const handleReplyClick = (message: ChatMessage) => { 
+        if(!message.isBotMessage){ setReplyingTo(message); inputRef.current?.focus(); }
+    };
+    const formatDate = (timestamp: Timestamp | null | undefined): string => {
+        return timestamp?.toDate ? timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    };
     const handleScrollToMessage = (messageId: string) => {
         const element = document.getElementById(`message-${messageId}`);
         if (element) {
@@ -485,12 +491,78 @@ export default function ChatContent({ userProfile, activeChannelId, setActiveCha
         setAllowedRanks(category?.allowedRanks || []); 
         setIsCategoryModalOpen(true); 
     };
-    const handleSaveChannel = async () => { if (!channelName.trim() || !selectedCategoryId || !db) return; try { if (editingChannel?.channel) { await updateDoc(doc(db, 'chatChannels', editingChannel.channel.id), { name: channelName.trim(), categoryId: selectedCategoryId }); toast({ title: "Canal Atualizado!" }); } else { await addDoc(collection(db, 'chatChannels'), { name: channelName.trim(), categoryId: selectedCategoryId, isPrivate: false, allowedUsers: [], createdAt: serverTimestamp() }); toast({ title: "Canal Criado!" }); } setIsChannelModalOpen(false); setEditingChannel(null); setChannelName(''); } catch (error) { toast({ title: "Erro", description: "Não foi possível salvar o canal.", variant: "destructive" }); } };
-    const handleSaveCategory = async () => { if (!newCategoryName.trim() || !db) return; try { if (editingCategory) { await updateDoc(doc(db, 'chatCategories', editingCategory.id), { name: newCategoryName.trim(), order: newCategoryOrder, allowedRanks }); toast({ title: "Categoria Atualizada!" }); } else { await addDoc(collection(db, 'chatCategories'), { name: newCategoryName.trim(), order: newCategoryOrder, createdAt: serverTimestamp(), allowedRanks }); toast({ title: "Categoria Criada!" }); } setIsCategoryModalOpen(false); setNewCategoryName(''); setNewCategoryOrder(0); setEditingCategory(null); setAllowedRanks([]); } catch (error) { toast({ title: "Erro", description: "Não foi possível salvar a categoria.", variant: "destructive" }); } };
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => { const value = e.target.value; const cursorPosition = e.target.selectionStart || 0; const atIndex = value.lastIndexOf('@', cursorPosition - 1); if (atIndex !== -1) { const query = value.substring(atIndex + 1, cursorPosition); if (!/\s/.test(query)) { setIsMentioning(true); setMentionQuery(query); mentionStartPositionRef.current = atIndex; const rect = e.target.getBoundingClientRect(); setMentionPopupPosition({ top: rect.top - 200, left: rect.left }); } else { setIsMentioning(false); } } else { setIsMentioning(false); } setNewMessage(value); };
-    const handleMentionSelect = (user: UserProfile) => { if (mentionStartPositionRef.current === null) return; const before = newMessage.substring(0, mentionStartPositionRef.current); const after = newMessage.substring(inputRef.current?.selectionStart || 0); setNewMessage(`${before}@${user.displayName} ${after}`); setIsMentioning(false); setMentionQuery(''); mentionStartPositionRef.current = null; inputRef.current?.focus(); };
+    const handleSaveChannel = async () => { 
+        if (!channelName.trim() || !selectedCategoryId || !db) return; 
+        try { 
+            if (editingChannel?.channel) { 
+                await updateDoc(doc(db, 'chatChannels', editingChannel.channel.id), { name: channelName.trim(), categoryId: selectedCategoryId }); 
+                toast({ title: "Canal Atualizado!" }); 
+            } else { 
+                await addDoc(collection(db, 'chatChannels'), { name: channelName.trim(), categoryId: selectedCategoryId, isPrivate: false, allowedUsers: [], createdAt: serverTimestamp() }); 
+                toast({ title: "Canal Criado!" }); 
+            } 
+            setIsChannelModalOpen(false); 
+            setEditingChannel(null); 
+            setChannelName(''); 
+        } catch (error) { 
+            toast({ title: "Erro", description: "Não foi possível salvar o canal.", variant: "destructive" }); 
+        } 
+    };
+    const handleSaveCategory = async () => { 
+        if (!newCategoryName.trim() || !db) return; 
+        try { 
+            if (editingCategory) { 
+                await updateDoc(doc(db, 'chatCategories', editingCategory.id), { name: newCategoryName.trim(), order: newCategoryOrder, allowedRanks }); 
+                toast({ title: "Categoria Atualizada!" }); 
+            } else { 
+                await addDoc(collection(db, 'chatCategories'), { name: newCategoryName.trim(), order: newCategoryOrder, createdAt: serverTimestamp(), allowedRanks }); 
+                toast({ title: "Categoria Criada!" }); 
+            } 
+            setIsCategoryModalOpen(false); 
+            setNewCategoryName(''); 
+            setNewCategoryOrder(0); 
+            setEditingCategory(null); 
+            setAllowedRanks([]); 
+        } catch (error) { 
+            toast({ title: "Erro", description: "Não foi possível salvar a categoria.", variant: "destructive" }); 
+        } 
+    };
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => { 
+        const value = e.target.value; 
+        const cursorPosition = e.target.selectionStart || 0; 
+        const atIndex = value.lastIndexOf('@', cursorPosition - 1); 
+        if (atIndex !== -1) { 
+            const query = value.substring(atIndex + 1, cursorPosition); 
+            if (!/\s/.test(query)) { 
+                setIsMentioning(true); 
+                setMentionQuery(query); 
+                mentionStartPositionRef.current = atIndex; 
+                const rect = e.target.getBoundingClientRect(); 
+                setMentionPopupPosition({ top: rect.top - 200, left: rect.left }); 
+            } else { 
+                setIsMentioning(false); 
+            } 
+        } else { 
+            setIsMentioning(false); 
+        } 
+        setNewMessage(value); 
+    };
+    const handleMentionSelect = (user: UserProfile) => { 
+        if (mentionStartPositionRef.current === null) return; 
+        const before = newMessage.substring(0, mentionStartPositionRef.current); 
+        const after = newMessage.substring(inputRef.current?.selectionStart || 0); 
+        setNewMessage(`${before}@${user.displayName} ${after}`); 
+        setIsMentioning(false); 
+        setMentionQuery(''); 
+        mentionStartPositionRef.current = null; 
+        inputRef.current?.focus(); 
+    };
     const filteredUsersForMention = allUsers.filter(user => user.displayName.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, 5);
-    const RankIcon = ({ rank }: { rank?: string }) => { const Icon = rank ? rankIcons[rank] : null; if (!Icon) return null; return <Icon className="h-4 w-4 ml-1.5" /> };
+    const RankIcon = ({ rank }: { rank?: string }) => { 
+        const Icon = rank ? rankIcons[rank] : null; 
+        if (!Icon) return null; 
+        return <Icon className="h-4 w-4 ml-1.5" />;
+    };
 
   return (
     <div className="flex w-full bg-secondary/40 rounded-lg border border-border h-[calc(100vh-var(--header-height)-4rem)]">
