@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Search, User, LogOut, Crown, Settings, UserCircle, Bell, Info, CheckCircle, AlertTriangle, Menu, Loader2, LifeBuoy, ShoppingCart } from 'lucide-react';
+import { Search, User, LogOut, Crown, Settings, UserCircle, Bell, Info, CheckCircle, AlertTriangle, Menu, Loader2, LifeBuoy, ShoppingCart, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
