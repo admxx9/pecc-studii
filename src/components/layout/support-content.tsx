@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
@@ -98,14 +97,18 @@ export default function SupportContent({ userProfile, triggerSalesTicket, onSale
     const scrollAreaRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
+    const isCreatingRef = useRef(false); // Ref to prevent duplicate ticket creation
 
     // Effect to handle sales ticket creation trigger
     useEffect(() => {
         const createTicket = async (subject: string, initialMessage: string) => {
-            if (!userProfile || !db || isCreating) {
-                return;
-            }
+            if (!userProfile || !db) return;
+
+            // Use ref to prevent race conditions
+            if (isCreatingRef.current) return;
+            isCreatingRef.current = true;
             setIsCreating(true);
+
             try {
                 const newTicketRef = await addDoc(collection(db, 'supportTickets'), {
                     subject,
@@ -132,6 +135,7 @@ export default function SupportContent({ userProfile, triggerSalesTicket, onSale
                  toast({ title: "Erro", description: "Não foi possível criar seu ticket.", variant: "destructive" });
             } finally {
                 setIsCreating(false);
+                isCreatingRef.current = false; // Release the lock
             }
         };
 
@@ -142,7 +146,8 @@ export default function SupportContent({ userProfile, triggerSalesTicket, onSale
                 `Olá ${userProfile.displayName}! Recebemos sua solicitação de orçamento. Por favor, forneça o máximo de detalhes sobre o que você precisa (links, referências, etc.) para que possamos avaliar.`
             );
         }
-    }, [triggerSalesTicket, userProfile, onSalesTicketHandled, isCreating, toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [triggerSalesTicket, userProfile]);
 
 
     // Fetch tickets
