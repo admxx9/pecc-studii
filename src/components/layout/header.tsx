@@ -250,7 +250,7 @@ export default function Header({
               <Button variant="ghost" className={getButtonClass('aulas')} onClick={() => setActiveTab('aulas')}>Aulas</Button>
               <Button variant="ghost" className={getButtonClass('ferramentas')} onClick={() => setActiveTab('ferramentas')}>Ferramentas</Button>
               <Button variant="ghost" className={getButtonClass('loja')} onClick={() => setActiveTab('loja')}>Loja</Button>
-              <Button variant="ghost" className={getButtonClass('chat')} onClick={() => setActiveTab('chat')}>Chat</Button>
+              <Button variant="ghost" className={getButtonClass('suporte')} onClick={() => setActiveTab('suporte')}>Suporte</Button>
               {isAdmin && <Button variant="ghost" className={getButtonClass('admin')} onClick={() => setActiveTab('admin')}>Painel Admin</Button>}
           </nav>
        )}
@@ -367,7 +367,7 @@ export default function Header({
              <Button variant="ghost" className={cn(getButtonClass('aulas'), "justify-start")} onClick={() => { setActiveTab('aulas'); setIsMobileMenuOpen(false); }}>Aulas</Button>
              <Button variant="ghost" className={cn(getButtonClass('ferramentas'), "justify-start")} onClick={() => { setActiveTab('ferramentas'); setIsMobileMenuOpen(false); }}>Ferramentas</Button>
              <Button variant="ghost" className={cn(getButtonClass('loja'), "justify-start")} onClick={() => { setActiveTab('loja'); setIsMobileMenuOpen(false); }}>Loja</Button>
-             <Button variant="ghost" className={cn(getButtonClass('chat'), "justify-start")} onClick={() => { setActiveTab('chat'); setIsMobileMenuOpen(false); }}>Chat</Button>
+             <Button variant="ghost" className={cn(getButtonClass('suporte'), "justify-start")} onClick={() => { setActiveTab('suporte'); setIsMobileMenuOpen(false); }}>Suporte</Button>
              {isAdmin && <Button variant="ghost" className={cn(getButtonClass('admin'), "justify-start")} onClick={() => { setActiveTab('admin'); setIsMobileMenuOpen(false); }}>Painel Admin</Button>}
               <Button variant="ghost" className="justify-start text-muted-foreground" asChild><Link href={DISCORD_INVITE_LINK} target="_blank" rel="noopener noreferrer" onClick={() => setIsMobileMenuOpen(false)}><LifeBuoy className="mr-1.5 h-4 w-4" />Suporte</Link></Button>
                <Button variant="ghost" className="justify-start text-muted-foreground" asChild>

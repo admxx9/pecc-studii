@@ -7,7 +7,7 @@ import Sidebar from '@/components/layout/sidebar';
 import MainContent from '@/components/layout/main-content';
 import ToolsContent from '@/components/layout/tools-content';
 import ShopContent from '@/components/layout/shop-content'; // Import ShopContent
-import ChatContent from '@/components/layout/chat-content';
+import SupportContent from '@/components/layout/support-content'; // Import SupportContent
 import AdminPanel from '@/components/layout/admin-panel';
 import SignUpForm from '@/components/auth/sign-up-form';
 import LevelUpModal from '@/components/ui/level-up-modal';
@@ -60,7 +60,7 @@ export interface UserProfile {
 }
 
 
-export type ActiveTab = 'aulas' | 'ferramentas' | 'loja' | 'chat' | 'admin';
+export type ActiveTab = 'aulas' | 'ferramentas' | 'loja' | 'suporte' | 'admin';
 
 const LOGO_URL = "https://i.imgur.com/sXliRZl.png";
 
@@ -99,14 +99,15 @@ export default function HomeClientPage() {
   // Effect to handle tab and channel changes from URL
   useEffect(() => {
     const tabFromUrl = searchParams.get('tab') as ActiveTab | null;
-    const channelIdFromUrl = searchParams.get('channelId');
+    const ticketIdFromUrl = searchParams.get('ticketId');
 
-    if (tabFromUrl && ['aulas', 'ferramentas', 'loja', 'chat', 'admin'].includes(tabFromUrl)) {
+    if (tabFromUrl && ['aulas', 'ferramentas', 'loja', 'suporte', 'admin'].includes(tabFromUrl)) {
       setActiveTab(tabFromUrl);
     }
-    if (channelIdFromUrl) {
-      setActiveChatChannelId(channelIdFromUrl);
-      setActiveTab('chat'); // Switch to chat tab if a channelId is present
+     if (ticketIdFromUrl) {
+      // Logic to handle opening a specific ticket will be inside SupportContent
+      // but we can switch to the support tab.
+      setActiveTab('suporte');
     }
   }, [searchParams]);
 
@@ -371,10 +372,7 @@ export default function HomeClientPage() {
   };
   
   const handleCreateSalesTicket = useCallback((mapType: 'GTA V' | 'GTA IV') => {
-    setActiveTab('chat');
-    // This is a simplified trigger. The actual ticket creation logic is in ChatContent.
-    // We'll pass the interest via a temporary state or a more robust context/state manager in a real app.
-    // For now, ChatContent will need a way to know this was triggered.
+    setActiveTab('suporte');
     setTriggerSalesTicket(true); 
   }, []);
 
@@ -575,11 +573,9 @@ export default function HomeClientPage() {
                     <ShopContent onCreateSalesTicket={handleCreateSalesTicket} />
                 </div>
             )}
-            {!isLoading && activeTab === 'chat' && (
-              <ChatContent 
+            {!isLoading && activeTab === 'suporte' && (
+              <SupportContent 
                 userProfile={userProfile} 
-                activeChannelId={activeChatChannelId} 
-                setActiveChannelId={setActiveChatChannelId}
                 triggerSalesTicket={triggerSalesTicket}
                 onSalesTicketHandled={() => setTriggerSalesTicket(false)}
               />

@@ -16,7 +16,7 @@ import NotificationSender from '@/components/admin/notification-sender'; // Impo
 import ManageCodes from '@/components/admin/manage-codes'; // Import ManageCodes
 import SettingsPanel from '@/components/admin/settings-panel'; // Import SettingsPanel
 import type { Tool } from '@/components/layout/tools-content';
-import type { Lesson } from '@/app/page';
+import type { Lesson } from '@/components/page/home-client-page';
 
 
 // Add 'manage-codes' to the section types
