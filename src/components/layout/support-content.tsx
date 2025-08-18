@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
@@ -6,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Send, UserCircle, MessageSquareReply, X, Trash2, Copy, MoreHorizontal, ChevronLeft, LifeBuoy, Ticket, Loader2, MessageSquarePlus, Search, ShoppingCart, Hammer } from 'lucide-react';
+import { Send, UserCircle, MessageSquareReply, X, Trash2, Copy, MoreHorizontal, ChevronLeft, LifeBuoy, Ticket, Loader2, MessageSquarePlus, Search, ShoppingCart, Hammer, Trash } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -93,6 +94,7 @@ export default function SupportContent({ userProfile, serviceRequest, onServiceR
     const [newMessage, setNewMessage] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [isCreating, setIsCreating] = useState(false);
+    const [isClearing, setIsClearing] = useState(false); // State for clearing all tickets
     const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
     const [ticketToDelete, setTicketToDelete] = useState<SupportTicket | null>(null);
     const [filter, setFilter] = useState<'all' | 'support' | 'quote' | 'purchase'>('all');
@@ -284,6 +286,7 @@ export default function SupportContent({ userProfile, serviceRequest, onServiceR
     const handleDeleteTicket = async (ticket: SupportTicket) => {
         if (!ticket || !db) return;
         try {
+            // In a real app, you might want to delete subcollection messages first
             await deleteDoc(doc(db, 'supportTickets', ticket.id));
             toast({ title: "Ticket Excluído", description: "O ticket e todas as suas mensagens foram removidos." });
             if (activeTicket?.id === ticket.id) {
@@ -292,6 +295,30 @@ export default function SupportContent({ userProfile, serviceRequest, onServiceR
         } catch (error) {
             console.error("Error deleting ticket:", error);
             toast({ title: "Erro", description: "Não foi possível excluir o ticket.", variant: "destructive" });
+        }
+    };
+
+    const handleClearAllTickets = async () => {
+        if (!db || !userProfile?.isAdmin) return;
+        setIsClearing(true);
+        try {
+            const ticketsQuery = query(collection(db, "supportTickets"));
+            const querySnapshot = await getDocs(ticketsQuery);
+            if (querySnapshot.empty) {
+                toast({ title: "Nenhum Ticket", description: "Não há tickets para limpar.", variant: "default" });
+                return;
+            }
+            const batch = writeBatch(db);
+            querySnapshot.docs.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+            await batch.commit();
+            toast({ title: "Tickets Limpos!", description: "Todos os tickets de suporte foram excluídos.", className: "bg-green-600 text-white" });
+        } catch (error) {
+            console.error("Error clearing tickets:", error);
+            toast({ title: "Erro ao Limpar", description: "Não foi possível limpar todos os tickets.", variant: "destructive" });
+        } finally {
+            setIsClearing(false);
         }
     };
 
@@ -363,10 +390,36 @@ export default function SupportContent({ userProfile, serviceRequest, onServiceR
                         <CardTitle className="text-2xl">Central de Suporte</CardTitle>
                         <CardDescription>Veja seus tickets ou abra um novo chamado.</CardDescription>
                     </div>
-                    <Button onClick={handleCreateGenericTicket} disabled={isCreating}>
-                        {isCreating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MessageSquarePlus className="mr-2 h-4 w-4" />}
-                        Abrir Ticket de Suporte
-                    </Button>
+                    <div className="flex items-center gap-2">
+                        {userProfile?.isAdmin && (
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="destructive" disabled={isClearing || tickets.length === 0}>
+                                        {isClearing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash className="mr-2 h-4 w-4" />}
+                                        Limpar Todos
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Limpar todos os tickets?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            Esta ação é irreversível e excluirá permanentemente todos os tickets de suporte. Tem certeza?
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                        <AlertDialogAction onClick={handleClearAllTickets} className="bg-destructive hover:bg-destructive/90">
+                                            {isClearing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Sim, limpar tudo"}
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        )}
+                        <Button onClick={handleCreateGenericTicket} disabled={isCreating}>
+                            {isCreating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MessageSquarePlus className="mr-2 h-4 w-4" />}
+                            Abrir Ticket
+                        </Button>
+                    </div>
                 </div>
                  {userProfile?.isAdmin && (
                     <div className="flex flex-col sm:flex-row gap-2 pt-4 border-t mt-4">
@@ -421,7 +474,7 @@ export default function SupportContent({ userProfile, serviceRequest, onServiceR
                                                             <AlertDialogHeader>
                                                                 <AlertDialogTitle>Excluir Ticket?</AlertDialogTitle>
                                                                 <AlertDialogDescription>
-                                                                    Tem certeza que deseja excluir este ticket? Todas as mensagens serão perdidas permanentemente.
+                                                                    Tem certeza que deseja excluir o ticket para "{ticket.subject}"? Esta ação é permanente.
                                                                 </AlertDialogDescription>
                                                             </AlertDialogHeader>
                                                             <AlertDialogFooter>
