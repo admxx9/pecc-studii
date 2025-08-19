@@ -198,26 +198,57 @@ export default function ProfilePage() {
 
         try {
             const pdf = new jsPDF('p', 'mm', 'a4');
-            
-            pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(16);
-            pdf.text("Contrato de Serviço - STUDIO PECC", 105, 20, { align: 'center' });
+            const pageHeight = pdf.internal.pageSize.getHeight();
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const margin = 15;
+            let yPos = 20;
 
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(11);
-            
-            const textLines = pdf.splitTextToSize(contract.text, 180); 
-            pdf.text(textLines, 15, 40);
+            // Header with Logo
+            const logoUrl = 'https://i.imgur.com/sXliRZl.png'; // Using a CORS-friendly URL
+            const img = new Image();
+            img.crossOrigin = 'Anonymous';
+            img.src = logoUrl;
+            img.onload = () => {
+                pdf.addImage(img, 'PNG', margin, 10, 30, 30);
+                pdf.setFont("helvetica", "bold");
+                pdf.setFontSize(16);
+                pdf.text("STUDIO PECC", pageWidth - margin, 25, { align: 'right' });
+                pdf.setFontSize(10);
+                pdf.setFont("helvetica", "normal");
+                pdf.text("Contrato de Prestação de Serviços", pageWidth - margin, 32, { align: 'right' });
 
-            let finalY = 50 + (textLines.length * 5); 
-            if (finalY > 280) finalY = 280; 
+                yPos = 50; // Set initial Y position after header
 
-            pdf.setFontSize(9);
-            pdf.setTextColor(150);
-            pdf.text(`ID do Contrato: ${contract.id}`, 15, finalY + 10);
-            pdf.text(`Data de Geração: ${new Date().toLocaleDateString()}`, 15, finalY + 15);
+                // Contract Text
+                pdf.setFont("helvetica", "normal");
+                pdf.setFontSize(11);
+                const textLines = pdf.splitTextToSize(contract.text, pageWidth - margin * 2);
+                
+                // Add text line by line and check for page breaks
+                textLines.forEach((line: string) => {
+                    if (yPos + 10 > pageHeight - margin) {
+                        pdf.addPage();
+                        yPos = margin;
+                    }
+                    pdf.text(line, margin, yPos);
+                    yPos += 7; // Line height
+                });
+                
+                // Footer
+                const finalY = yPos + 10 > pageHeight - margin ? margin : yPos + 10;
+                if (yPos + 10 > pageHeight - margin) pdf.addPage();
 
-            pdf.save(`contrato-${contract.id}.pdf`);
+                pdf.setFontSize(9);
+                pdf.setTextColor(150);
+                pdf.text(`ID do Contrato: ${contract.id}`, margin, finalY);
+                pdf.text(`Data de Geração: ${new Date().toLocaleDateString()}`, margin, finalY + 5);
+
+                pdf.save(`contrato-${contract.id}.pdf`);
+            };
+            img.onerror = () => {
+                toast({ title: "Erro ao Carregar Logo", description: "Não foi possível carregar a imagem do logo para o PDF.", variant: "destructive" });
+            };
+
 
         } catch (error: any) {
             console.error("Error generating PDF:", error);

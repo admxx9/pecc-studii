@@ -1,14 +1,17 @@
-
 'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea'; // Import Textarea
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Send, UserCircle, MessageSquareReply, X, Trash2, Copy, MoreHorizontal, ChevronLeft, LifeBuoy, Ticket, Loader2, MessageSquarePlus, Search, ShoppingCart, Hammer, Trash, FileText, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
+import { useForm } from 'react-hook-form'; // Import useForm
+import { zodResolver } from '@hookform/resolvers/zod'; // Import zodResolver
+import * as z from 'zod'; // Import z
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +30,14 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import {
+    Form,
+    FormControl,
+    FormField,
+    FormItem,
+    FormLabel,
+    FormMessage,
+} from "@/components/ui/form";
 import { Skeleton } from '@/components/ui/skeleton';
 
 
@@ -54,6 +65,7 @@ interface SupportTicket {
   relatedTicketId?: string; // For cancellation tickets
 }
 
+// Update ChatMessage to include full contract data
 interface ChatMessage {
   id: string;
   text: string;
@@ -68,9 +80,12 @@ interface ChatMessage {
   replyTo?: { messageId: string; text: string; authorName: string } | null;
   isBotMessage?: boolean;
   isContract?: boolean;
-  contractData?: {
+  contractData?: { // Changed from simple fields to a structured object
     clientName: string;
     clientCpf: string;
+    object: string; // "Objeto do Contrato"
+    deadline: string; // "Prazo"
+    price: string; // "Valor"
   };
   contractStatus?: 'pending' | 'signed' | 'cancelled';
   isCancellation?: boolean;
@@ -81,11 +96,23 @@ interface ChatMessage {
   cancellationStatus?: 'pending' | 'confirmed';
 }
 
+
 interface SupportContentProps {
   userProfile: UserProfile | null;
   serviceRequest: { type: 'quote' | 'purchase'; details: string } | null;
   onServiceRequestHandled: () => void;
 }
+
+// Zod schema for the contract generation form
+const contractFormSchema = z.object({
+    clientName: z.string().min(3, "Nome do cliente é obrigatório."),
+    clientCpf: z.string().min(11, "CPF deve ter pelo menos 11 dígitos."),
+    object: z.string().min(10, "O objeto do contrato é obrigatório."),
+    deadline: z.string().min(3, "O prazo é obrigatório."),
+    price: z.string().min(1, "O valor é obrigatório."),
+});
+
+type ContractFormData = z.infer<typeof contractFormSchema>;
 
 const renderMessageText = (text: string) => {
     const mentionRegex = /(@[a-zA-Z0-9_À-ú]+)/g;
@@ -117,10 +144,22 @@ export default function SupportContent({ userProfile, serviceRequest, onServiceR
     const [signingContract, setSigningContract] = useState<{ messageId: string } | null>(null);
     const [cancellingContract, setCancellingContract] = useState<{ messageId: string } | null>(null);
     const [confirmationText, setConfirmationText] = useState('');
+    const [isContractFormOpen, setIsContractFormOpen] = useState(false);
     const scrollAreaRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
     const isCreatingRef = useRef(false);
+
+    const contractForm = useForm<ContractFormData>({
+        resolver: zodResolver(contractFormSchema),
+        defaultValues: {
+            clientName: '',
+            clientCpf: '',
+            object: '',
+            deadline: '',
+            price: ''
+        },
+    });
 
     // Effect to handle service requests (quote or purchase)
     useEffect(() => {
@@ -261,22 +300,29 @@ export default function SupportContent({ userProfile, serviceRequest, onServiceR
         }
     }
 
-     // Generate a sample contract text
-    const generateContractText = (clientName: string, clientCpf: string, adminName: string) => {
-        return `
-CONTRATO DE PRESTAÇÃO DE SERVIÇOS
+    // Function to generate contract text from form data
+    const generateContractTextFromData = (data: ContractFormData, adminName: string) => {
+        return `CONTRATO DE PRESTAÇÃO DE SERVIÇOS\n\nCONTRATANTE: ${data.clientName}, portador(a) do CPF nº ${data.clientCpf}.\nCONTRATADO: STUDIO PECC, representado por ${adminName}.\n\nOBJETO: ${data.object}\n\nPRAZO: ${data.deadline}\n\nVALOR: ${data.price}\n\nTERMOS: O CONTRATANTE declara estar ciente e de acordo com os termos de serviço e políticas da STUDIO PECC. Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrato.`;
+    };
 
-CONTRATANTE: ${clientName}, portador(a) do CPF nº ${clientCpf}.
-CONTRATADO: STUDIO PECC, representado por ${adminName}.
 
-OBJETO: O presente contrato tem como objeto a prestação de serviços de [descrever o serviço, ex: conversão de mapa, desenvolvimento de script] conforme solicitado pelo CONTRATANTE.
+    const handleCreateContract = async (values: ContractFormData) => {
+        if (!userProfile?.isAdmin || !db || !activeTicket) return;
 
-PRAZO E VALOR: A serem definidos em comum acordo.
-
-TERMOS: O CONTRATANTE declara estar ciente e de acordo com os termos de serviço e políticas da STUDIO PECC.
-
-Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrato.
-        `.trim();
+        const contractText = generateContractTextFromData(values, userProfile.displayName);
+        
+        await addDoc(collection(db, 'supportTickets', activeTicket.id, 'messages'), {
+            text: contractText,
+            user: { uid: userProfile.uid, name: userProfile.displayName, avatar: userProfile.photoURL, rank: userProfile.rank, isAdmin: true },
+            createdAt: serverTimestamp(),
+            isContract: true,
+            contractData: values,
+            contractStatus: 'pending',
+        });
+        
+        toast({ title: "Contrato Gerado", description: "O contrato foi enviado no chat para assinatura do cliente.", className: "bg-blue-500 text-white" });
+        setIsContractFormOpen(false);
+        contractForm.reset();
     };
 
     const handleSendMessage = async (e: React.FormEvent) => {
@@ -285,28 +331,8 @@ Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrat
 
         // Admin commands
         if (userProfile.isAdmin) {
-            if (newMessage.startsWith('/contrato ')) {
-                const parts = newMessage.split(' ');
-                if (parts.length >= 4) {
-                    const clientName = `${parts[1]} ${parts[2]}`;
-                    const clientCpf = parts[3];
-                    const contractText = generateContractText(clientName, clientCpf, userProfile.displayName);
-                    await addDoc(collection(db, 'supportTickets', activeTicket.id, 'messages'), {
-                        text: contractText,
-                        user: { uid: userProfile.uid, name: userProfile.displayName, avatar: userProfile.photoURL, rank: userProfile.rank, isAdmin: true },
-                        createdAt: serverTimestamp(),
-                        isContract: true,
-                        contractData: { clientName, clientCpf },
-                        contractStatus: 'pending',
-                    });
-                    setNewMessage('');
-                    return;
-                } else {
-                    toast({ title: "Comando Inválido", description: "Use o formato: /contrato [Nome] [Sobrenome] [CPF]", variant: "destructive" });
-                    return;
-                }
-            } else if (newMessage.startsWith('/cancelar')) {
-                 // Check if the current ticket is a cancellation request ticket
+             if (newMessage.startsWith('/cancelar')) {
+                // Check if the current ticket is a cancellation request ticket
                 if (!activeTicket.relatedContractId || !activeTicket.relatedTicketId) {
                     toast({ title: "Comando Inválido", description: "Este comando só pode ser usado em um ticket de solicitação de cancelamento.", variant: "destructive" });
                     return;
@@ -381,7 +407,7 @@ Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrat
         }
 
         if (confirmationText.trim().toLowerCase() !== clientNameInContract.trim().toLowerCase()) {
-            toast({ title: "Assinatura Inválida", description: "O nome digitado não corresponde ao nome do contratante.", variant: "destructive" });
+            toast({ title: "Assinatura Inválida", description: "O nome digitado não corresponde ao nome do contratante no documento.", variant: "destructive" });
             return;
         }
 
@@ -645,6 +671,35 @@ Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrat
                 <div className="p-4 border-t border-border mt-auto flex-shrink-0">
                     <form onSubmit={handleSendMessage} className="flex items-center gap-2">
                         <Input ref={inputRef} value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder={`Conversar em #${activeTicket.subject}`} className="flex-1 bg-input" autoComplete="off" disabled={activeTicket.status === 'closed'} />
+                         {userProfile?.isAdmin && (
+                            <AlertDialog open={isContractFormOpen} onOpenChange={setIsContractFormOpen}>
+                                <AlertDialogTrigger asChild>
+                                     <Button type="button" variant="outline" size="icon" className="flex-shrink-0" disabled={activeTicket.status === 'closed'}>
+                                        <FileText className="h-4 w-4" />
+                                        <span className="sr-only">Gerar Contrato</span>
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Gerar Novo Contrato</AlertDialogTitle>
+                                        <AlertDialogDescription>Preencha os detalhes abaixo para gerar o contrato.</AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <Form {...contractForm}>
+                                        <form onSubmit={contractForm.handleSubmit(handleCreateContract)} className="space-y-4">
+                                            <FormField control={contractForm.control} name="clientName" render={({ field }) => ( <FormItem><FormLabel>Nome do Cliente</FormLabel><FormControl><Input placeholder="Nome completo" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                                            <FormField control={contractForm.control} name="clientCpf" render={({ field }) => ( <FormItem><FormLabel>CPF do Cliente</FormLabel><FormControl><Input placeholder="Apenas números" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                                            <FormField control={contractForm.control} name="object" render={({ field }) => ( <FormItem><FormLabel>Objeto do Contrato</FormLabel><FormControl><Textarea placeholder="Descrição detalhada do serviço" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                                            <FormField control={contractForm.control} name="deadline" render={({ field }) => ( <FormItem><FormLabel>Prazo de Entrega</FormLabel><FormControl><Input placeholder="Ex: 30 dias úteis" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                                            <FormField control={contractForm.control} name="price" render={({ field }) => ( <FormItem><FormLabel>Valor (R$)</FormLabel><FormControl><Input placeholder="Ex: 1500,00" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                                            <AlertDialogFooter>
+                                                <AlertDialogCancel type="button">Cancelar</AlertDialogCancel>
+                                                <Button type="submit">Gerar Contrato</Button>
+                                            </AlertDialogFooter>
+                                        </form>
+                                    </Form>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                         )}
                         <Button type="submit" size="icon" className="flex-shrink-0" disabled={newMessage.trim() === '' || activeTicket.status === 'closed'}><Send className="h-4 w-4" /></Button>
                     </form>
                 </div>
