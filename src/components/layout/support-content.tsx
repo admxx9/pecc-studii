@@ -36,6 +36,7 @@ import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, Timestamp, doc, deleteDoc, updateDoc, arrayUnion, arrayRemove, getDocs, where, or, writeBatch } from 'firebase/firestore';
 import { useToast } from "@/hooks/use-toast";
 import { ranks, rankIcons } from '@/config/ranks';
+import { Label } from '../ui/label';
 
 type TicketType = 'support' | 'quote' | 'purchase';
 
@@ -106,6 +107,8 @@ export default function SupportContent({ userProfile, serviceRequest, onServiceR
     const [ticketToDelete, setTicketToDelete] = useState<SupportTicket | null>(null);
     const [filter, setFilter] = useState<'all' | 'support' | 'quote' | 'purchase'>('all');
     const [searchTerm, setSearchTerm] = useState('');
+    const [signingContract, setSigningContract] = useState<{ messageId: string } | null>(null);
+    const [signatureName, setSignatureName] = useState('');
     const scrollAreaRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
@@ -324,17 +327,30 @@ Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrat
         }
     };
     
-    // Function for the client to sign the contract
-    const handleSignContract = async (messageId: string) => {
-        if (!db || !activeTicket || !userProfile || userProfile.isAdmin) return;
+    // Updated: Open the signature confirmation dialog
+    const handleSignContract = (messageId: string) => {
+        if (!userProfile || userProfile.isAdmin) return;
+        setSigningContract({ messageId });
+    };
+
+    // New: Handle the final signature after name confirmation
+    const handleConfirmSignature = async () => {
+        if (!signingContract || !db || !activeTicket || !userProfile || userProfile.isAdmin) return;
         
-        const messageRef = doc(db, 'supportTickets', activeTicket.id, 'messages', messageId);
+        if (signatureName.trim().toLowerCase() !== userProfile.displayName.trim().toLowerCase()) {
+            toast({ title: "Assinatura Inválida", description: "O nome digitado não corresponde ao seu nome de perfil.", variant: "destructive" });
+            return;
+        }
+
+        const messageRef = doc(db, 'supportTickets', activeTicket.id, 'messages', signingContract.messageId);
         try {
             await updateDoc(messageRef, {
                 contractStatus: 'signed',
-                text: 'Contrato assinado digitalmente.', // Optional: change the text after signing
+                text: `Contrato assinado digitalmente por ${userProfile.displayName}.`,
             });
             toast({ title: "Contrato Assinado!", description: "O contrato foi confirmado com sucesso.", className: "bg-green-600 text-white" });
+            setSigningContract(null);
+            setSignatureName('');
         } catch (error) {
             console.error("Error signing contract:", error);
             toast({ title: "Erro", description: "Não foi possível assinar o contrato.", variant: "destructive" });
@@ -354,7 +370,6 @@ Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrat
     const handleDeleteTicket = async (ticket: SupportTicket) => {
         if (!ticket || !db) return;
         try {
-            // In a real app, you might want to delete subcollection messages first
             await deleteDoc(doc(db, 'supportTickets', ticket.id));
             toast({ title: "Ticket Excluído", description: "O ticket e todas as suas mensagens foram removidos." });
             if (activeTicket?.id === ticket.id) {
@@ -449,7 +464,7 @@ Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrat
                                             {msg.contractStatus === 'signed' && (
                                                 <div className="mt-4 flex items-center gap-2 text-green-600 border-t pt-2">
                                                     <CheckCircle className="h-5 w-5" />
-                                                    <p className="font-semibold text-sm">Contrato Assinado em {formatDate(msg.createdAt)}</p>
+                                                    <p className="font-semibold text-sm">Contrato Assinado</p>
                                                 </div>
                                             )}
                                         </div>
@@ -461,6 +476,31 @@ Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrat
                         ))}
                     </div>
                 </ScrollArea>
+                {/* Signature Confirmation Dialog */}
+                <AlertDialog open={!!signingContract} onOpenChange={() => { setSigningContract(null); setSignatureName(''); }}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Confirmar Assinatura</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Para confirmar e assinar digitalmente este contrato, por favor, digite seu nome completo como exibido em seu perfil.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <div className="py-2">
+                            <Label htmlFor="signatureName" className="text-muted-foreground">Seu Nome Completo</Label>
+                            <Input
+                                id="signatureName"
+                                value={signatureName}
+                                onChange={(e) => setSignatureName(e.target.value)}
+                                placeholder={userProfile?.displayName || "Digite seu nome"}
+                                autoComplete="off"
+                            />
+                        </div>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleConfirmSignature} disabled={signatureName.trim() === ''}>Assinar</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
                 <div className="p-4 border-t border-border mt-auto flex-shrink-0">
                     <form onSubmit={handleSendMessage} className="flex items-center gap-2">
                         <Input ref={inputRef} value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder={`Conversar em #${activeTicket.subject}`} className="flex-1 bg-input" autoComplete="off" disabled={activeTicket.status === 'closed'} />
@@ -585,5 +625,3 @@ Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrat
         </Card>
     );
 }
-
-    
