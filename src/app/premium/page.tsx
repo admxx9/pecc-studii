@@ -12,7 +12,7 @@ import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import Link from 'next/link';
-import { collection, getDocs, query, where, addDoc, serverTimestamp, writeBatch, doc } from 'firebase/firestore';
+import { collection, getDocs, query, where, addDoc, serverTimestamp, writeBatch, doc, getDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { add } from 'date-fns';
 
@@ -269,5 +269,3 @@ export default function PremiumPage() {
     </div>
   );
 }
-
-    
