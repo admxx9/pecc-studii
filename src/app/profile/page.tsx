@@ -433,7 +433,7 @@ export default function ProfilePage() {
                                                 <div ref={el => contractRefs.current[contract.id] = el} className="pdf-content hidden">
                                                     <div className="p-8 bg-[#0f0f1a] text-gray-200 font-sans">
                                                          <img 
-                                                             src="https://media.discordapp.net/attachments/1165297478489342095/1360499211107565770/1744438683192.png?ex=681ba3e0&is=681a5260&hm=6a5bee1b15e35dab8ebed6b44a0f479541f3684d306120ddf6b6f40c3bfb535a&=&format=webp&quality=lossless&width=673&height=673"
+                                                             src="https://i.imgur.com/sXliRZl.png"
                                                              alt="Logo"
                                                              className="w-24 h-24 mx-auto mb-4" 
                                                              crossOrigin="anonymous" // Add crossorigin attribute
