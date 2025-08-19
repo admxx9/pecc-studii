@@ -205,7 +205,7 @@ export default function ProfilePage() {
 
             // Header with Logo
             const logoUrl = 'https://i.imgur.com/sXliRZl.png'; // Using a CORS-friendly URL
-            const img = new Image();
+            const img = new window.Image();
             img.crossOrigin = 'Anonymous';
             img.src = logoUrl;
             img.onload = () => {
@@ -572,3 +572,4 @@ export default function ProfilePage() {
 }
 
     
+
