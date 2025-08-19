@@ -1,18 +1,18 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image'; // Import next/image
 import Link from 'next/link'; // Import Link
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc, updateDoc } from 'firebase/firestore'; // Import updateDoc
+import { doc, getDoc, updateDoc, getDocs, collection, query, where, orderBy, Timestamp } from 'firebase/firestore'; // Import updateDoc
 import { auth, db } from '@/lib/firebase';
 import Header from '@/components/layout/header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { User as UserIcon, Mail, Edit, Crown, ArrowLeft, Star, Upload, RefreshCw, Loader2 } from 'lucide-react'; // Import Star icon, Upload
+import { User as UserIcon, Mail, Edit, Crown, ArrowLeft, Star, Upload, RefreshCw, Loader2, FileText, Download, AlertCircle } from 'lucide-react'; // Import Star icon, Upload
 import UpdateProfileForm from '@/components/profile/update-profile-form';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
@@ -20,6 +20,9 @@ import { Badge } from '@/components/ui/badge'; // Import Badge
 import { ranks } from '@/config/ranks';
 import { cn } from '@/lib/utils'; // Import cn
 import { useToast } from '@/hooks/use-toast'; // Import useToast
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 export interface UserProfileData {
     displayName: string;
@@ -32,6 +35,14 @@ export interface UserProfileData {
     bannerURL?: string | null; // Add banner URL
 }
 
+interface Contract {
+    id: string; // messageId
+    text: string;
+    contractStatus: 'pending' | 'signed';
+    createdAt: Timestamp;
+    ticketId: string;
+}
+
 
 export default function ProfilePage() {
     const [user, setUser] = useState<User | null>(null);
@@ -39,6 +50,11 @@ export default function ProfilePage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false); // State for the edit dialog
     const [isUpdatingBanner, setIsUpdatingBanner] = useState(false); // State for banner update
+    const [contracts, setContracts] = useState<Contract[]>([]);
+    const [isLoadingContracts, setIsLoadingContracts] = useState(true);
+    const contractRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+
+
     const router = useRouter();
     const { toast } = useToast();
 
@@ -80,22 +96,57 @@ export default function ProfilePage() {
         }
     }, [user]);
 
+     const fetchContracts = useCallback(async (userId: string) => {
+        if (!db) return;
+        setIsLoadingContracts(true);
+        const userContracts: Contract[] = [];
+        try {
+            // Find all tickets related to the user
+            const ticketsQuery = query(collection(db, 'supportTickets'), where('userId', '==', userId));
+            const ticketsSnapshot = await getDocs(ticketsQuery);
+
+            // For each ticket, check for contract messages
+            for (const ticketDoc of ticketsSnapshot.docs) {
+                const messagesQuery = query(collection(ticketDoc.ref, 'messages'), where('isContract', '==', true), orderBy('createdAt', 'desc'));
+                const messagesSnapshot = await getDocs(messagesQuery);
+                messagesSnapshot.forEach(msgDoc => {
+                    const data = msgDoc.data();
+                    userContracts.push({
+                        id: msgDoc.id,
+                        text: data.text,
+                        contractStatus: data.contractStatus,
+                        createdAt: data.createdAt,
+                        ticketId: ticketDoc.id,
+                    });
+                });
+            }
+            setContracts(userContracts);
+        } catch (error) {
+            console.error("Error fetching contracts:", error);
+            toast({ title: "Erro", description: "Não foi possível carregar seus contratos.", variant: "destructive" });
+        } finally {
+            setIsLoadingContracts(false);
+        }
+    }, [toast]);
+
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             if (currentUser) {
                 setUser(currentUser);
                 const userProfile = await fetchUserProfile(currentUser.uid);
                 setProfile(userProfile);
+                await fetchContracts(currentUser.uid);
             } else {
                 setUser(null);
                 setProfile(null);
+                setContracts([]);
                 router.push('/');
             }
             setIsLoading(false);
         });
 
         return () => unsubscribe();
-    }, [fetchUserProfile, router]);
+    }, [fetchUserProfile, fetchContracts, router]);
 
     const handleSignOut = async () => {
       if (auth) {
@@ -137,6 +188,33 @@ export default function ProfilePage() {
             setIsUpdatingBanner(false);
         }
     };
+    
+    const handleDownloadPdf = async (contractId: string) => {
+        const contractElement = contractRefs.current[contractId];
+        if (!contractElement) {
+            toast({ title: "Erro", description: "Não foi possível encontrar o conteúdo do contrato para gerar o PDF.", variant: "destructive" });
+            return;
+        }
+
+        toast({ title: "Gerando PDF...", description: "Por favor, aguarde.", variant: "default" });
+
+        try {
+            const canvas = await html2canvas(contractElement, {
+                scale: 2, // Increase scale for better resolution
+                backgroundColor: '#0f0f1a', // Match the dark theme background
+                useCORS: true, // For images from other origins
+            });
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+            pdf.save(`contrato-${contractId}.pdf`);
+        } catch (error) {
+            console.error("Error generating PDF:", error);
+            toast({ title: "Erro ao Gerar PDF", description: "Ocorreu um problema ao tentar criar o arquivo PDF.", variant: "destructive" });
+        }
+    };
 
 
     if (isLoading || !user) {
@@ -154,6 +232,10 @@ export default function ProfilePage() {
     }
 
     const dummySetActiveTab = () => {};
+
+    const activeContracts = contracts.filter(c => c.contractStatus === 'pending' || c.contractStatus === 'signed');
+    const finalizedContracts = contracts.filter(c => c.contractStatus !== 'pending' && c.contractStatus !== 'signed');
+
 
     return (
         <div className="flex flex-col min-h-screen bg-background text-foreground">
@@ -308,10 +390,81 @@ export default function ProfilePage() {
                                  </Dialog>
                              </div>
                          </div>
-
-                        {/* Additional Profile Sections (Optional) */}
-                        {/* <div className="border-t border-border mt-6 pt-6"> ... </div> */}
                     </div>
+                </Card>
+
+                {/* Contracts Section */}
+                <Card className="max-w-4xl mx-auto bg-card shadow-xl border-border rounded-lg overflow-hidden mt-8">
+                     <CardHeader>
+                        <CardTitle className="text-xl font-semibold text-foreground flex items-center gap-2">
+                             <FileText className="h-5 w-5" />
+                             Meus Contratos
+                        </CardTitle>
+                        <CardDescription>
+                            Visualize e gerencie seus contratos de serviço.
+                        </CardDescription>
+                     </CardHeader>
+                     <CardContent>
+                         <Tabs defaultValue="active" className="w-full">
+                            <TabsList className="grid w-full grid-cols-2">
+                                <TabsTrigger value="active">Ativos ({activeContracts.length})</TabsTrigger>
+                                <TabsTrigger value="finalized">Finalizados ({finalizedContracts.length})</TabsTrigger>
+                            </TabsList>
+                            <TabsContent value="active" className="mt-4">
+                                {isLoadingContracts ? (
+                                     <div className="space-y-3">
+                                        <Skeleton className="h-20 w-full" />
+                                        <Skeleton className="h-20 w-full" />
+                                     </div>
+                                ) : activeContracts.length > 0 ? (
+                                     <div className="space-y-3">
+                                        {activeContracts.map(contract => (
+                                            <div key={contract.id} className="border p-4 rounded-md bg-secondary/50">
+                                                {/* Hidden div for PDF generation */}
+                                                <div ref={el => contractRefs.current[contract.id] = el} className="pdf-content hidden">
+                                                    <div className="p-8 bg-[#0f0f1a] text-gray-200 font-sans">
+                                                        <img src="https://i.imgur.com/sXliRZl.png" alt="Logo" className="w-24 h-24 mx-auto mb-4" />
+                                                        <h1 className="text-2xl font-bold text-center mb-6 text-white">Contrato de Serviço</h1>
+                                                        <pre className="whitespace-pre-wrap text-sm leading-relaxed">{contract.text}</pre>
+                                                        <div className="mt-8 pt-4 border-t border-gray-600 text-xs text-gray-400">
+                                                            <p>Documento gerado em: {new Date().toLocaleDateString()}</p>
+                                                            <p>ID do Contrato: {contract.id}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex justify-between items-center">
+                                                     <div className="flex-1">
+                                                         <p className="font-semibold text-foreground">Contrato de Serviço</p>
+                                                         <p className="text-xs text-muted-foreground">ID do Ticket: {contract.ticketId}</p>
+                                                         <Badge variant={contract.contractStatus === 'signed' ? 'success' : 'outline'} className="mt-2 capitalize">
+                                                            {contract.contractStatus === 'signed' ? 'Assinado' : 'Pendente'}
+                                                         </Badge>
+                                                     </div>
+                                                     <Button size="sm" onClick={() => handleDownloadPdf(contract.id)}>
+                                                        <Download className="mr-2 h-4 w-4" />
+                                                        Baixar PDF
+                                                     </Button>
+                                                 </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                     <p className="text-center text-muted-foreground py-6">Nenhum contrato ativo encontrado.</p>
+                                )}
+                            </TabsContent>
+                             <TabsContent value="finalized" className="mt-4">
+                                {isLoadingContracts ? (
+                                    <p className="text-center text-muted-foreground py-6">Carregando...</p>
+                                ) : finalizedContracts.length > 0 ? (
+                                    <div className="space-y-3">
+                                        {/* Map finalized contracts here */}
+                                    </div>
+                                ) : (
+                                     <p className="text-center text-muted-foreground py-6">Nenhum contrato finalizado encontrado.</p>
+                                )}
+                            </TabsContent>
+                         </Tabs>
+                     </CardContent>
                 </Card>
             </main>
         </div>
