@@ -337,8 +337,16 @@ Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrat
     const handleConfirmSignature = async () => {
         if (!signingContract || !db || !activeTicket || !userProfile || userProfile.isAdmin) return;
         
-        if (signatureName.trim().toLowerCase() !== userProfile.displayName.trim().toLowerCase()) {
-            toast({ title: "Assinatura Inválida", description: "O nome digitado não corresponde ao seu nome de perfil.", variant: "destructive" });
+        const contractMessage = messages.find(m => m.id === signingContract.messageId);
+        const clientNameInContract = contractMessage?.contractData?.clientName;
+
+        if (!clientNameInContract) {
+             toast({ title: "Erro Interno", description: "Não foi possível encontrar os dados do cliente no contrato.", variant: "destructive" });
+             return;
+        }
+
+        if (signatureName.trim().toLowerCase() !== clientNameInContract.trim().toLowerCase()) {
+            toast({ title: "Assinatura Inválida", description: "O nome digitado não corresponde ao nome do contratante no documento.", variant: "destructive" });
             return;
         }
 
@@ -346,7 +354,7 @@ Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrat
         try {
             await updateDoc(messageRef, {
                 contractStatus: 'signed',
-                text: `Contrato assinado digitalmente por ${userProfile.displayName}.`,
+                text: `Contrato assinado digitalmente por ${clientNameInContract}.`,
             });
             toast({ title: "Contrato Assinado!", description: "O contrato foi confirmado com sucesso.", className: "bg-green-600 text-white" });
             setSigningContract(null);
@@ -482,16 +490,16 @@ Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrat
                         <AlertDialogHeader>
                             <AlertDialogTitle>Confirmar Assinatura</AlertDialogTitle>
                             <AlertDialogDescription>
-                                Para confirmar e assinar digitalmente este contrato, por favor, digite seu nome completo como exibido em seu perfil.
+                                Para confirmar e assinar digitalmente este contrato, por favor, digite o nome do contratante como exibido no documento.
                             </AlertDialogDescription>
                         </AlertDialogHeader>
                         <div className="py-2">
-                            <Label htmlFor="signatureName" className="text-muted-foreground">Seu Nome Completo</Label>
+                            <Label htmlFor="signatureName" className="text-muted-foreground">Nome Completo do Contratante</Label>
                             <Input
                                 id="signatureName"
                                 value={signatureName}
                                 onChange={(e) => setSignatureName(e.target.value)}
-                                placeholder={userProfile?.displayName || "Digite seu nome"}
+                                placeholder="Digite o nome completo do contrato"
                                 autoComplete="off"
                             />
                         </div>
