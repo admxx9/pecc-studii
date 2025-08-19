@@ -229,10 +229,14 @@ export default function SupportContent({ userProfile, serviceRequest, onServiceR
 
         const q = userProfile.isAdmin
             ? query(collection(db, 'supportTickets'), orderBy('createdAt', 'desc'))
-            : query(collection(db, 'supportTickets'), where('userId', '==', userProfile.uid), orderBy('createdAt', 'desc'));
+            : query(collection(db, 'supportTickets'), where('userId', '==', userProfile.uid));
         
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const fetchedTickets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SupportTicket));
+            // Sort client-side if not admin
+            if (!userProfile.isAdmin) {
+                fetchedTickets.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+            }
             setTickets(fetchedTickets);
             setIsLoading(false);
         }, (error) => {
@@ -302,7 +306,18 @@ export default function SupportContent({ userProfile, serviceRequest, onServiceR
 
     // Function to generate contract text from form data
     const generateContractTextFromData = (data: ContractFormData, adminName: string) => {
-        return `CONTRATO DE PRESTAÇÃO DE SERVIÇOS\n\nCONTRATANTE: ${data.clientName}, portador(a) do CPF nº ${data.clientCpf}.\nCONTRATADO: STUDIO PECC, representado por ${adminName}.\n\nOBJETO: ${data.object}\n\nPRAZO: ${data.deadline}\n\nVALOR: ${data.price}\n\nTERMOS: O CONTRATANTE declara estar ciente e de acordo com os termos de serviço e políticas da STUDIO PECC. Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrato.`;
+        return `CONTRATO DE PRESTAÇÃO DE SERVIÇOS
+
+CONTRATANTE: ${data.clientName}, portador(a) do CPF nº ${data.clientCpf}.
+CONTRATADO: STUDIO PECC, representado por ${adminName}.
+
+OBJETO: ${data.object}
+
+PRAZO: ${data.deadline}
+
+VALOR: ${data.price}
+
+TERMOS: O CONTRATANTE declara estar ciente e de acordo com os termos de serviço e políticas da STUDIO PECC. Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrato.`;
     };
 
 
