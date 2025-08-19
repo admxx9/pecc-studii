@@ -22,7 +22,6 @@ import { cn } from '@/lib/utils'; // Import cn
 import { useToast } from '@/hooks/use-toast'; // Import useToast
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 
 export interface UserProfileData {
     displayName: string;
@@ -52,7 +51,6 @@ export default function ProfilePage() {
     const [isUpdatingBanner, setIsUpdatingBanner] = useState(false); // State for banner update
     const [contracts, setContracts] = useState<Contract[]>([]);
     const [isLoadingContracts, setIsLoadingContracts] = useState(true);
-    const contractRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
 
     const router = useRouter();
@@ -189,37 +187,42 @@ export default function ProfilePage() {
         }
     };
     
-    const handleDownloadPdf = async (contractId: string) => {
-        const contractElement = contractRefs.current[contractId];
-        if (!contractElement) {
-            toast({ title: "Erro", description: "Não foi possível encontrar o conteúdo do contrato para gerar o PDF.", variant: "destructive" });
+    const handleDownloadPdf = (contract: Contract) => {
+        if (!contract) {
+            toast({ title: "Erro", description: "Conteúdo do contrato não encontrado.", variant: "destructive" });
             return;
         }
-
+        
         toast({ title: "Gerando PDF...", description: "Por favor, aguarde.", variant: "default" });
 
         try {
-            // Ensure images inside the element are loaded before capturing
-            const images = Array.from(contractElement.getElementsByTagName('img'));
-            await Promise.all(images.map(img => {
-                if (img.complete) return Promise.resolve();
-                return new Promise(resolve => { img.onload = resolve; });
-            }));
-
-            const canvas = await html2canvas(contractElement, {
-                scale: 2, // Increase scale for better resolution
-                backgroundColor: '#0f0f1a', // Match the dark theme background
-                useCORS: true, // For images from other origins
-                logging: false,
-            });
-
-            const imgData = canvas.toDataURL('image/png');
             const pdf = new jsPDF('p', 'mm', 'a4');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-            pdf.save(`contrato-${contractId}.pdf`);
-        } catch (error) {
+            
+            // Set properties
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(16);
+            pdf.text("Contrato de Serviço - STUDIO PECC", 105, 20, { align: 'center' });
+
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(11);
+            
+            // Split text into lines to fit the page width
+            const textLines = pdf.splitTextToSize(contract.text, 180); // 180mm width
+            pdf.text(textLines, 15, 40);
+
+            let finalY = pdf.getLastAutoTable().finalY || 50 + (textLines.length * 5); // estimate final y
+            if (finalY > 280) finalY = 280; // Make sure it's on the page
+
+            // Add footer info
+            pdf.setFontSize(9);
+            pdf.setTextColor(150);
+            pdf.text(`ID do Contrato: ${contract.id}`, 15, finalY + 10);
+            pdf.text(`Data de Geração: ${new Date().toLocaleDateString()}`, 15, finalY + 15);
+
+
+            pdf.save(`contrato-${contract.id}.pdf`);
+
+        } catch (error: any) {
             console.error("Error generating PDF:", error);
             toast({ title: "Erro ao Gerar PDF", description: "Ocorreu um problema ao tentar criar o arquivo PDF.", variant: "destructive" });
         }
@@ -429,23 +432,6 @@ export default function ProfilePage() {
                                      <div className="space-y-3">
                                         {activeContracts.map(contract => (
                                             <div key={contract.id} className="border p-4 rounded-md bg-secondary/50">
-                                                {/* Hidden div for PDF generation */}
-                                                <div ref={el => contractRefs.current[contract.id] = el} className="pdf-content hidden">
-                                                    <div className="p-8 bg-[#0f0f1a] text-gray-200 font-sans">
-                                                         <img 
-                                                             src="https://i.imgur.com/sXliRZl.png"
-                                                             alt="Logo"
-                                                             className="w-24 h-24 mx-auto mb-4" 
-                                                             crossOrigin="anonymous" // Add crossorigin attribute
-                                                         />
-                                                        <h1 className="text-2xl font-bold text-center mb-6 text-white">Contrato de Serviço</h1>
-                                                        <pre className="whitespace-pre-wrap text-sm leading-relaxed">{contract.text}</pre>
-                                                        <div className="mt-8 pt-4 border-t border-gray-600 text-xs text-gray-400">
-                                                            <p>Documento gerado em: {new Date().toLocaleDateString()}</p>
-                                                            <p>ID do Contrato: {contract.id}</p>
-                                                        </div>
-                                                    </div>
-                                                </div>
                                                 <div className="flex justify-between items-center">
                                                      <div className="flex-1">
                                                          <p className="font-semibold text-foreground">Contrato de Serviço</p>
@@ -454,7 +440,7 @@ export default function ProfilePage() {
                                                             {contract.contractStatus === 'signed' ? 'Assinado' : 'Pendente'}
                                                          </Badge>
                                                      </div>
-                                                     <Button size="sm" onClick={() => handleDownloadPdf(contract.id)}>
+                                                     <Button size="sm" onClick={() => handleDownloadPdf(contract)}>
                                                         <Download className="mr-2 h-4 w-4" />
                                                         Baixar PDF
                                                      </Button>
@@ -484,3 +470,5 @@ export default function ProfilePage() {
         </div>
     );
 }
+
+    
