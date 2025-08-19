@@ -6,13 +6,13 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image'; // Import next/image
 import Link from 'next/link'; // Import Link
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc, updateDoc, getDocs, collection, query, where, orderBy, Timestamp } from 'firebase/firestore'; // Import updateDoc
+import { doc, getDoc, updateDoc, getDocs, collection, query, where, orderBy, Timestamp, addDoc, serverTimestamp } from 'firebase/firestore'; // Import updateDoc
 import { auth, db } from '@/lib/firebase';
 import Header from '@/components/layout/header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { User as UserIcon, Mail, Edit, Crown, ArrowLeft, Star, Upload, RefreshCw, Loader2, FileText, Download, AlertCircle } from 'lucide-react'; // Import Star icon, Upload
+import { User as UserIcon, Mail, Edit, Crown, ArrowLeft, Star, Upload, RefreshCw, Loader2, FileText, Download, AlertCircle, XCircle } from 'lucide-react'; // Import Star icon, Upload
 import UpdateProfileForm from '@/components/profile/update-profile-form';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
@@ -37,7 +37,7 @@ export interface UserProfileData {
 interface Contract {
     id: string; // messageId
     text: string;
-    contractStatus: 'pending' | 'signed';
+    contractStatus: 'pending' | 'signed' | 'cancelled';
     createdAt: Timestamp;
     ticketId: string;
 }
@@ -51,6 +51,7 @@ export default function ProfilePage() {
     const [isUpdatingBanner, setIsUpdatingBanner] = useState(false); // State for banner update
     const [contracts, setContracts] = useState<Contract[]>([]);
     const [isLoadingContracts, setIsLoadingContracts] = useState(true);
+    const [isCancelling, setIsCancelling] = useState<string | null>(null);
 
 
     const router = useRouter();
@@ -198,7 +199,6 @@ export default function ProfilePage() {
         try {
             const pdf = new jsPDF('p', 'mm', 'a4');
             
-            // Set properties
             pdf.setFont("helvetica", "bold");
             pdf.setFontSize(16);
             pdf.text("Contrato de Serviço - STUDIO PECC", 105, 20, { align: 'center' });
@@ -206,25 +206,61 @@ export default function ProfilePage() {
             pdf.setFont("helvetica", "normal");
             pdf.setFontSize(11);
             
-            // Split text into lines to fit the page width
-            const textLines = pdf.splitTextToSize(contract.text, 180); // 180mm width
+            const textLines = pdf.splitTextToSize(contract.text, 180); 
             pdf.text(textLines, 15, 40);
 
-            let finalY = 50 + (textLines.length * 5); // Simple estimation of text height
-            if (finalY > 280) finalY = 280; // Make sure it's on the page
+            let finalY = 50 + (textLines.length * 5); 
+            if (finalY > 280) finalY = 280; 
 
-            // Add footer info
             pdf.setFontSize(9);
             pdf.setTextColor(150);
             pdf.text(`ID do Contrato: ${contract.id}`, 15, finalY + 10);
             pdf.text(`Data de Geração: ${new Date().toLocaleDateString()}`, 15, finalY + 15);
-
 
             pdf.save(`contrato-${contract.id}.pdf`);
 
         } catch (error: any) {
             console.error("Error generating PDF:", error);
             toast({ title: "Erro ao Gerar PDF", description: "Ocorreu um problema ao tentar criar o arquivo PDF.", variant: "destructive" });
+        }
+    };
+
+    const handleCancelContractRequest = async (contract: Contract) => {
+        if (!user || !profile || !db) {
+            toast({ title: "Erro", description: "Você precisa estar logado para cancelar.", variant: "destructive" });
+            return;
+        }
+        setIsCancelling(contract.id);
+        try {
+            const subject = `Solicitação de Cancelamento de Contrato`;
+            const initialMessage = `Olá! Recebemos sua solicitação para cancelar o contrato (Ticket ID: ${contract.ticketId}). Um administrador irá analisar seu pedido e entrar em contato em breve para os próximos passos.`;
+
+            const newTicketRef = await addDoc(collection(db, 'supportTickets'), {
+                subject,
+                status: 'open',
+                userId: user.uid,
+                userName: profile.displayName,
+                type: 'support', // Cancellation is a type of support ticket
+                relatedContractId: contract.id,
+                relatedTicketId: contract.ticketId,
+                createdAt: serverTimestamp(),
+            });
+
+            await addDoc(collection(newTicketRef, 'messages'), {
+                text: initialMessage,
+                user: { uid: 'bot', name: 'Assistente', avatar: 'https://i.imgur.com/sXliRZl.png', isAdmin: true },
+                createdAt: serverTimestamp(),
+                isBotMessage: true,
+            });
+
+            toast({ title: "Solicitação Enviada!", description: "Um ticket para o cancelamento foi aberto. Acompanhe em 'Suporte'.", className: "bg-blue-500 text-white" });
+            router.push('/?tab=suporte');
+
+        } catch (error) {
+            console.error("Error creating cancellation ticket:", error);
+            toast({ title: "Erro", description: "Não foi possível criar o ticket de cancelamento.", variant: "destructive" });
+        } finally {
+            setIsCancelling(null);
         }
     };
 
@@ -246,7 +282,7 @@ export default function ProfilePage() {
     const dummySetActiveTab = () => {};
 
     const activeContracts = contracts.filter(c => c.contractStatus === 'pending' || c.contractStatus === 'signed');
-    const finalizedContracts = contracts.filter(c => c.contractStatus !== 'pending' && c.contractStatus !== 'signed');
+    const finalizedContracts = contracts.filter(c => c.contractStatus === 'cancelled');
 
 
     return (
@@ -432,7 +468,7 @@ export default function ProfilePage() {
                                      <div className="space-y-3">
                                         {activeContracts.map(contract => (
                                             <div key={contract.id} className="border p-4 rounded-md bg-secondary/50">
-                                                <div className="flex justify-between items-center">
+                                                <div className="flex justify-between items-start sm:items-center flex-col sm:flex-row gap-4">
                                                      <div className="flex-1">
                                                          <p className="font-semibold text-foreground">Contrato de Serviço</p>
                                                          <p className="text-xs text-muted-foreground">ID do Ticket: {contract.ticketId}</p>
@@ -440,10 +476,27 @@ export default function ProfilePage() {
                                                             {contract.contractStatus === 'signed' ? 'Assinado' : 'Pendente'}
                                                          </Badge>
                                                      </div>
-                                                     <Button size="sm" onClick={() => handleDownloadPdf(contract)}>
-                                                        <Download className="mr-2 h-4 w-4" />
-                                                        Baixar PDF
-                                                     </Button>
+                                                     <div className="flex items-center gap-2 self-end sm:self-center">
+                                                        <Button size="sm" variant="outline" onClick={() => handleDownloadPdf(contract)}>
+                                                            <Download className="mr-2 h-4 w-4" />
+                                                            Baixar PDF
+                                                        </Button>
+                                                        {contract.contractStatus === 'signed' && (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="destructive"
+                                                                onClick={() => handleCancelContractRequest(contract)}
+                                                                disabled={isCancelling === contract.id}
+                                                            >
+                                                                {isCancelling === contract.id ? (
+                                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                                ) : (
+                                                                    <XCircle className="mr-2 h-4 w-4" />
+                                                                )}
+                                                                Cancelar
+                                                            </Button>
+                                                        )}
+                                                     </div>
                                                  </div>
                                             </div>
                                         ))}
@@ -457,7 +510,23 @@ export default function ProfilePage() {
                                     <p className="text-center text-muted-foreground py-6">Carregando...</p>
                                 ) : finalizedContracts.length > 0 ? (
                                     <div className="space-y-3">
-                                        {/* Map finalized contracts here */}
+                                        {finalizedContracts.map(contract => (
+                                            <div key={contract.id} className="border p-4 rounded-md bg-secondary/50 opacity-70">
+                                                <div className="flex justify-between items-center">
+                                                    <div className="flex-1">
+                                                        <p className="font-semibold text-foreground">Contrato de Serviço</p>
+                                                        <p className="text-xs text-muted-foreground">ID do Ticket: {contract.ticketId}</p>
+                                                        <Badge variant="destructive" className="mt-2 capitalize">
+                                                            Cancelado
+                                                        </Badge>
+                                                    </div>
+                                                    <Button size="sm" variant="outline" onClick={() => handleDownloadPdf(contract)}>
+                                                        <Download className="mr-2 h-4 w-4" />
+                                                        Baixar PDF
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
                                 ) : (
                                      <p className="text-center text-muted-foreground py-6">Nenhum contrato finalizado encontrado.</p>

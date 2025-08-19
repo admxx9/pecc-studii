@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Send, UserCircle, MessageSquareReply, X, Trash2, Copy, MoreHorizontal, ChevronLeft, LifeBuoy, Ticket, Loader2, MessageSquarePlus, Search, ShoppingCart, Hammer, Trash, FileText, CheckCircle } from 'lucide-react';
+import { Send, UserCircle, MessageSquareReply, X, Trash2, Copy, MoreHorizontal, ChevronLeft, LifeBuoy, Ticket, Loader2, MessageSquarePlus, Search, ShoppingCart, Hammer, Trash, FileText, CheckCircle, XCircle } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -65,13 +65,18 @@ interface ChatMessage {
   createdAt: Timestamp;
   replyTo?: { messageId: string; text: string; authorName: string } | null;
   isBotMessage?: boolean;
-  // New fields for contract message type
   isContract?: boolean;
   contractData?: {
     clientName: string;
     clientCpf: string;
   };
-  contractStatus?: 'pending' | 'signed';
+  contractStatus?: 'pending' | 'signed' | 'cancelled';
+  isCancellation?: boolean;
+  cancellationData?: {
+      originalTicketId: string;
+      originalContractId: string;
+  };
+  cancellationStatus?: 'pending' | 'confirmed';
 }
 
 interface SupportContentProps {
@@ -108,7 +113,8 @@ export default function SupportContent({ userProfile, serviceRequest, onServiceR
     const [filter, setFilter] = useState<'all' | 'support' | 'quote' | 'purchase'>('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [signingContract, setSigningContract] = useState<{ messageId: string } | null>(null);
-    const [signatureName, setSignatureName] = useState('');
+    const [cancellingContract, setCancellingContract] = useState<{ messageId: string } | null>(null);
+    const [confirmationText, setConfirmationText] = useState('');
     const scrollAreaRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
@@ -275,28 +281,47 @@ Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrat
         e.preventDefault();
         if (newMessage.trim() === '' || !userProfile || !db || !activeTicket || activeTicket.status === 'closed') return;
 
-         // Check for admin commands
-         if (userProfile.isAdmin && newMessage.startsWith('/contrato ')) {
-            const parts = newMessage.split(' ');
-            if (parts.length >= 4) {
-                const command = parts[0];
-                const clientName = `${parts[1]} ${parts[2]}`;
-                const clientCpf = parts[3];
-                const contractText = generateContractText(clientName, clientCpf, userProfile.displayName);
-                
+        // Admin commands
+        if (userProfile.isAdmin) {
+            if (newMessage.startsWith('/contrato ')) {
+                const parts = newMessage.split(' ');
+                if (parts.length >= 4) {
+                    const clientName = `${parts[1]} ${parts[2]}`;
+                    const clientCpf = parts[3];
+                    const contractText = generateContractText(clientName, clientCpf, userProfile.displayName);
+                    await addDoc(collection(db, 'supportTickets', activeTicket.id, 'messages'), {
+                        text: contractText,
+                        user: { uid: userProfile.uid, name: userProfile.displayName, avatar: userProfile.photoURL, rank: userProfile.rank, isAdmin: true },
+                        createdAt: serverTimestamp(),
+                        isContract: true,
+                        contractData: { clientName, clientCpf },
+                        contractStatus: 'pending',
+                    });
+                    setNewMessage('');
+                    return;
+                } else {
+                    toast({ title: "Comando Inválido", description: "Use o formato: /contrato [Nome] [Sobrenome] [CPF]", variant: "destructive" });
+                    return;
+                }
+            } else if (newMessage.startsWith('/cancelar')) {
+                 const originalContractMessage = messages.find(m => m.isContract);
+                 if (!originalContractMessage) {
+                     toast({ title: "Comando Inválido", description: "Nenhum contrato encontrado neste ticket para cancelar.", variant: "destructive" });
+                     return;
+                 }
+                const cancellationText = `O administrador iniciou o processo de cancelamento do contrato associado a este ticket. Para confirmar o cancelamento, por favor, clique no botão abaixo.`;
                 await addDoc(collection(db, 'supportTickets', activeTicket.id, 'messages'), {
-                    text: contractText,
+                    text: cancellationText,
                     user: { uid: userProfile.uid, name: userProfile.displayName, avatar: userProfile.photoURL, rank: userProfile.rank, isAdmin: true },
                     createdAt: serverTimestamp(),
-                    isContract: true,
-                    contractData: { clientName, clientCpf },
-                    contractStatus: 'pending',
+                    isCancellation: true,
+                    cancellationData: {
+                        originalTicketId: activeTicket.id,
+                        originalContractId: originalContractMessage.id,
+                    },
+                    cancellationStatus: 'pending',
                 });
-                
                 setNewMessage('');
-                return; // Stop further execution
-            } else {
-                toast({ title: "Comando Inválido", description: "Use o formato: /contrato [Nome] [Sobrenome] [CPF]", variant: "destructive" });
                 return;
             }
         }
@@ -327,26 +352,24 @@ Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrat
         }
     };
     
-    // Updated: Open the signature confirmation dialog
     const handleSignContract = (messageId: string) => {
         if (!userProfile || userProfile.isAdmin) return;
+        setConfirmationText('');
         setSigningContract({ messageId });
     };
 
-    // New: Handle the final signature after name confirmation
     const handleConfirmSignature = async () => {
         if (!signingContract || !db || !activeTicket || !userProfile || userProfile.isAdmin) return;
-        
         const contractMessage = messages.find(m => m.id === signingContract.messageId);
         const clientNameInContract = contractMessage?.contractData?.clientName;
 
         if (!clientNameInContract) {
-             toast({ title: "Erro Interno", description: "Não foi possível encontrar os dados do cliente no contrato.", variant: "destructive" });
+             toast({ title: "Erro Interno", description: "Não foi possível encontrar os dados do cliente.", variant: "destructive" });
              return;
         }
 
-        if (signatureName.trim().toLowerCase() !== clientNameInContract.trim().toLowerCase()) {
-            toast({ title: "Assinatura Inválida", description: "O nome digitado não corresponde ao nome do contratante no documento.", variant: "destructive" });
+        if (confirmationText.trim().toLowerCase() !== clientNameInContract.trim().toLowerCase()) {
+            toast({ title: "Assinatura Inválida", description: "O nome digitado não corresponde ao nome do contratante.", variant: "destructive" });
             return;
         }
 
@@ -358,12 +381,58 @@ Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrat
             });
             toast({ title: "Contrato Assinado!", description: "O contrato foi confirmado com sucesso.", className: "bg-green-600 text-white" });
             setSigningContract(null);
-            setSignatureName('');
+            setConfirmationText('');
         } catch (error) {
             console.error("Error signing contract:", error);
             toast({ title: "Erro", description: "Não foi possível assinar o contrato.", variant: "destructive" });
         }
     };
+
+    const handleCancelContract = (messageId: string) => {
+        if (!userProfile || userProfile.isAdmin) return;
+        setConfirmationText('');
+        setCancellingContract({ messageId });
+    };
+
+    const handleConfirmCancellation = async () => {
+        if (!cancellingContract || !db || !activeTicket || !userProfile || userProfile.isAdmin) return;
+        
+        if (confirmationText.trim().toUpperCase() !== 'CANCELAR') {
+            toast({ title: "Confirmação Inválida", description: "Você deve digitar 'CANCELAR' para confirmar.", variant: "destructive" });
+            return;
+        }
+
+        const cancellationMessage = messages.find(m => m.id === cancellingContract.messageId);
+        if (!cancellationMessage?.cancellationData) {
+            toast({ title: "Erro Interno", description: "Dados de cancelamento não encontrados.", variant: "destructive" });
+            return;
+        }
+
+        const { originalTicketId, originalContractId } = cancellationMessage.cancellationData;
+        const cancellationMsgRef = doc(db, 'supportTickets', activeTicket.id, 'messages', cancellingContract.messageId);
+        const originalContractMsgRef = doc(db, 'supportTickets', originalTicketId, 'messages', originalContractId);
+
+        try {
+            const batch = writeBatch(db);
+            batch.update(cancellationMsgRef, {
+                cancellationStatus: 'confirmed',
+                text: 'Cancelamento confirmado pelo cliente.',
+            });
+            batch.update(originalContractMsgRef, { contractStatus: 'cancelled' });
+            batch.update(doc(db, 'supportTickets', activeTicket.id), { status: 'closed' });
+
+            await batch.commit();
+
+            toast({ title: "Contrato Cancelado", description: "O contrato foi cancelado com sucesso.", className: "bg-green-600 text-white" });
+            setCancellingContract(null);
+            setConfirmationText('');
+            setActiveTicket(null); // Go back to ticket list
+        } catch (error) {
+            console.error("Error confirming cancellation:", error);
+            toast({ title: "Erro", description: "Não foi possível confirmar o cancelamento.", variant: "destructive" });
+        }
+    };
+
 
     const handleTicketStatusChange = async (ticket: SupportTicket, status: 'open' | 'closed') => {
         if (!db) return;
@@ -475,6 +544,31 @@ Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrat
                                                     <p className="font-semibold text-sm">Contrato Assinado</p>
                                                 </div>
                                             )}
+                                            {msg.contractStatus === 'cancelled' && (
+                                                <div className="mt-4 flex items-center gap-2 text-destructive border-t pt-2">
+                                                    <XCircle className="h-5 w-5" />
+                                                    <p className="font-semibold text-sm">Contrato Cancelado</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : msg.isCancellation ? (
+                                        <div className="mt-2 p-4 border border-yellow-500/50 rounded-lg bg-yellow-500/10">
+                                            <div className="flex items-center gap-2 mb-2 pb-2 border-b border-yellow-500/30">
+                                                <AlertCircle className="h-5 w-5 text-yellow-600" />
+                                                <h4 className="font-semibold text-yellow-700">Confirmação de Cancelamento</h4>
+                                            </div>
+                                            <p className="text-sm text-yellow-800/90 whitespace-pre-wrap">{msg.text}</p>
+                                            {msg.cancellationStatus === 'pending' && !userProfile?.isAdmin && (
+                                                <Button size="sm" className="mt-4 bg-destructive hover:bg-destructive/90" onClick={() => handleCancelContract(msg.id)}>
+                                                    Confirmar Cancelamento
+                                                </Button>
+                                            )}
+                                            {msg.cancellationStatus === 'confirmed' && (
+                                                 <div className="mt-4 flex items-center gap-2 text-destructive border-t pt-2">
+                                                    <CheckCircle className="h-5 w-5" />
+                                                    <p className="font-semibold text-sm">Cancelamento Confirmado</p>
+                                                </div>
+                                            )}
                                         </div>
                                     ) : (
                                         <p className="text-sm text-foreground/90 whitespace-pre-wrap">{renderMessageText(msg.text)}</p>
@@ -485,27 +579,54 @@ Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrat
                     </div>
                 </ScrollArea>
                 {/* Signature Confirmation Dialog */}
-                <AlertDialog open={!!signingContract} onOpenChange={() => { setSigningContract(null); setSignatureName(''); }}>
+                <AlertDialog open={!!signingContract} onOpenChange={() => { setSigningContract(null); setConfirmationText(''); }}>
                     <AlertDialogContent>
                         <AlertDialogHeader>
                             <AlertDialogTitle>Confirmar Assinatura</AlertDialogTitle>
                             <AlertDialogDescription>
-                                Para confirmar e assinar digitalmente este contrato, por favor, digite o nome do contratante como exibido no documento.
+                                Para confirmar e assinar digitalmente, digite o nome completo do contratante como exibido no documento.
                             </AlertDialogDescription>
                         </AlertDialogHeader>
                         <div className="py-2">
                             <Label htmlFor="signatureName" className="text-muted-foreground">Nome Completo do Contratante</Label>
                             <Input
                                 id="signatureName"
-                                value={signatureName}
-                                onChange={(e) => setSignatureName(e.target.value)}
-                                placeholder="Digite o nome completo do contrato"
+                                value={confirmationText}
+                                onChange={(e) => setConfirmationText(e.target.value)}
+                                placeholder="Digite o nome completo"
                                 autoComplete="off"
                             />
                         </div>
                         <AlertDialogFooter>
                             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleConfirmSignature} disabled={signatureName.trim() === ''}>Assinar</AlertDialogAction>
+                            <AlertDialogAction onClick={handleConfirmSignature} disabled={confirmationText.trim() === ''}>Assinar</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+                {/* Cancellation Confirmation Dialog */}
+                 <AlertDialog open={!!cancellingContract} onOpenChange={() => { setCancellingContract(null); setConfirmationText(''); }}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Confirmar Cancelamento</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Esta ação é irreversível. Para confirmar, digite <strong>CANCELAR</strong> no campo abaixo.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <div className="py-2">
+                            <Label htmlFor="cancellationText" className="text-muted-foreground">Confirmar Ação</Label>
+                            <Input
+                                id="cancellationText"
+                                value={confirmationText}
+                                onChange={(e) => setConfirmationText(e.target.value)}
+                                placeholder="Digite CANCELAR"
+                                autoComplete="off"
+                            />
+                        </div>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Voltar</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleConfirmCancellation} variant="destructive" disabled={confirmationText !== 'CANCELAR'}>
+                                Confirmar Cancelamento
+                            </AlertDialogAction>
                         </AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialog>
