@@ -371,8 +371,7 @@ const ManageUsers = () => {
                                     </div>
                                 </TableCell>
                             </TableRow>
-                        ) : (
-                            users.map((user) => {
+                        ) : (users.map((user) => {
                                 const progressPercent = calculateProgressPercentage(user.id);
                                 return (
                                     <TableRow key={user.id}>
@@ -487,8 +486,7 @@ const ManageUsers = () => {
                                         </TableCell>
                                     </TableRow>
                                 );
-                            })
-                        )}
+                            }))}
                     </TableBody>
                 </Table>
             </div>
