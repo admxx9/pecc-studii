@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { collection, getDocs, query, where, addDoc, serverTimestamp, writeBatch, doc, getDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { add } from 'date-fns';
+import PremiumActivatedModal from '@/components/ui/premium-activated-modal'; // Import the new modal
 
 const plans = [
   {
@@ -54,6 +55,7 @@ export default function PremiumPage() {
   const [isRequesting, setIsRequesting] = useState<string | null>(null);
   const [redemptionCode, setRedemptionCode] = useState('');
   const [isRedeeming, setIsRedeeming] = useState(false);
+  const [premiumModalInfo, setPremiumModalInfo] = useState<{ planType: 'basic' | 'pro'; durationDays: number } | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -154,11 +156,11 @@ export default function PremiumPage() {
 
         await batch.commit();
 
-        toast({
-            title: "Plano Ativado!",
-            description: `Você ativou o plano ${codeData.planType} por ${codeData.durationDays} dias.`,
-            className: "bg-green-600 border-green-600 text-white"
+        setPremiumModalInfo({
+            planType: codeData.planType,
+            durationDays: codeData.durationDays,
         });
+
         setRedemptionCode('');
 
     } catch (error) {
@@ -172,6 +174,15 @@ export default function PremiumPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
+       {premiumModalInfo && userProfile && (
+            <PremiumActivatedModal
+                isOpen={!!premiumModalInfo}
+                onClose={() => setPremiumModalInfo(null)}
+                planType={premiumModalInfo.planType}
+                durationDays={premiumModalInfo.durationDays}
+                userAvatar={userProfile.photoURL}
+            />
+        )}
        <header className="bg-card px-4 md:px-6 py-3 flex items-center justify-between shadow-md h-[var(--header-height)] sticky top-0 z-30">
         <Button variant="outline" onClick={() => router.push('/')} className="text-sm">
           <ArrowLeft className="mr-2 h-4 w-4"/>
