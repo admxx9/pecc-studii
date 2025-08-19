@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Send, UserCircle, MessageSquareReply, X, Trash2, Copy, MoreHorizontal, ChevronLeft, LifeBuoy, Ticket, Loader2, MessageSquarePlus, Search, ShoppingCart, Hammer, Trash } from 'lucide-react';
+import { Send, UserCircle, MessageSquareReply, X, Trash2, Copy, MoreHorizontal, ChevronLeft, LifeBuoy, Ticket, Loader2, MessageSquarePlus, Search, ShoppingCart, Hammer, Trash, FileText, CheckCircle } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -64,6 +64,13 @@ interface ChatMessage {
   createdAt: Timestamp;
   replyTo?: { messageId: string; text: string; authorName: string } | null;
   isBotMessage?: boolean;
+  // New fields for contract message type
+  isContract?: boolean;
+  contractData?: {
+    clientName: string;
+    clientCpf: string;
+  };
+  contractStatus?: 'pending' | 'signed';
 }
 
 interface SupportContentProps {
@@ -243,9 +250,53 @@ export default function SupportContent({ userProfile, serviceRequest, onServiceR
         }
     }
 
+     // Generate a sample contract text
+    const generateContractText = (clientName: string, clientCpf: string, adminName: string) => {
+        return `
+CONTRATO DE PRESTAÇÃO DE SERVIÇOS
+
+CONTRATANTE: ${clientName}, portador(a) do CPF nº ${clientCpf}.
+CONTRATADO: STUDIO PECC, representado por ${adminName}.
+
+OBJETO: O presente contrato tem como objeto a prestação de serviços de [descrever o serviço, ex: conversão de mapa, desenvolvimento de script] conforme solicitado pelo CONTRATANTE.
+
+PRAZO E VALOR: A serem definidos em comum acordo.
+
+TERMOS: O CONTRATANTE declara estar ciente e de acordo com os termos de serviço e políticas da STUDIO PECC.
+
+Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrato.
+        `.trim();
+    };
+
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
         if (newMessage.trim() === '' || !userProfile || !db || !activeTicket || activeTicket.status === 'closed') return;
+
+         // Check for admin commands
+         if (userProfile.isAdmin && newMessage.startsWith('/contrato ')) {
+            const parts = newMessage.split(' ');
+            if (parts.length >= 4) {
+                const command = parts[0];
+                const clientName = `${parts[1]} ${parts[2]}`;
+                const clientCpf = parts[3];
+                const contractText = generateContractText(clientName, clientCpf, userProfile.displayName);
+                
+                await addDoc(collection(db, 'supportTickets', activeTicket.id, 'messages'), {
+                    text: contractText,
+                    user: { uid: userProfile.uid, name: userProfile.displayName, avatar: userProfile.photoURL, rank: userProfile.rank, isAdmin: true },
+                    createdAt: serverTimestamp(),
+                    isContract: true,
+                    contractData: { clientName, clientCpf },
+                    contractStatus: 'pending',
+                });
+                
+                setNewMessage('');
+                return; // Stop further execution
+            } else {
+                toast({ title: "Comando Inválido", description: "Use o formato: /contrato [Nome] [Sobrenome] [CPF]", variant: "destructive" });
+                return;
+            }
+        }
         
         try {
             const ticketRef = doc(db, 'supportTickets', activeTicket.id);
@@ -270,6 +321,23 @@ export default function SupportContent({ userProfile, serviceRequest, onServiceR
         } catch (error) {
             console.error("Error sending message:", error);
             toast({ title: "Erro", description: "Não foi possível enviar a mensagem.", variant: "destructive" });
+        }
+    };
+    
+    // Function for the client to sign the contract
+    const handleSignContract = async (messageId: string) => {
+        if (!db || !activeTicket || !userProfile || userProfile.isAdmin) return;
+        
+        const messageRef = doc(db, 'supportTickets', activeTicket.id, 'messages', messageId);
+        try {
+            await updateDoc(messageRef, {
+                contractStatus: 'signed',
+                text: 'Contrato assinado digitalmente.', // Optional: change the text after signing
+            });
+            toast({ title: "Contrato Assinado!", description: "O contrato foi confirmado com sucesso.", className: "bg-green-600 text-white" });
+        } catch (error) {
+            console.error("Error signing contract:", error);
+            toast({ title: "Erro", description: "Não foi possível assinar o contrato.", variant: "destructive" });
         }
     };
 
@@ -366,7 +434,28 @@ export default function SupportContent({ userProfile, serviceRequest, onServiceR
                                         <span className="font-semibold text-foreground">{msg.user.name}</span>
                                         <p className="text-xs text-muted-foreground">{formatDate(msg.createdAt)}</p>
                                     </div>
-                                    <p className="text-sm text-foreground/90 whitespace-pre-wrap">{renderMessageText(msg.text)}</p>
+                                    {msg.isContract ? (
+                                        <div className="mt-2 p-4 border border-border rounded-lg bg-secondary/50">
+                                            <div className="flex items-center gap-2 mb-2 pb-2 border-b">
+                                                <FileText className="h-5 w-5 text-primary" />
+                                                <h4 className="font-semibold text-foreground">Contrato de Serviço</h4>
+                                            </div>
+                                            <p className="text-sm text-foreground/90 whitespace-pre-wrap">{msg.text}</p>
+                                            {msg.contractStatus === 'pending' && !userProfile?.isAdmin && (
+                                                <Button size="sm" className="mt-4 bg-green-600 hover:bg-green-700" onClick={() => handleSignContract(msg.id)}>
+                                                    Confirmar e Assinar
+                                                </Button>
+                                            )}
+                                            {msg.contractStatus === 'signed' && (
+                                                <div className="mt-4 flex items-center gap-2 text-green-600 border-t pt-2">
+                                                    <CheckCircle className="h-5 w-5" />
+                                                    <p className="font-semibold text-sm">Contrato Assinado em {formatDate(msg.createdAt)}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm text-foreground/90 whitespace-pre-wrap">{renderMessageText(msg.text)}</p>
+                                    )}
                                 </div>
                             </div>
                         ))}
@@ -467,19 +556,19 @@ export default function SupportContent({ userProfile, serviceRequest, onServiceR
                                                 <Badge variant={ticket.status === 'open' ? 'success' : 'destructive'}>{ticket.status}</Badge>
                                                 {userProfile?.isAdmin && (
                                                      <AlertDialog onOpenChange={(open) => !open && setTicketToDelete(null)}>
-                                                        <AlertDialogTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                                        <AlertDialogTrigger asChild onClick={(e) => { e.stopPropagation(); setTicketToDelete(ticket); }}>
                                                             <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive/70 hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></Button>
                                                         </AlertDialogTrigger>
                                                         <AlertDialogContent>
                                                             <AlertDialogHeader>
                                                                 <AlertDialogTitle>Excluir Ticket?</AlertDialogTitle>
                                                                 <AlertDialogDescription>
-                                                                    Tem certeza que deseja excluir o ticket para "{ticket.subject}"? Esta ação é permanente.
+                                                                    Tem certeza que deseja excluir o ticket para "{ticketToDelete?.subject}"? Esta ação é permanente.
                                                                 </AlertDialogDescription>
                                                             </AlertDialogHeader>
                                                             <AlertDialogFooter>
                                                                 <AlertDialogCancel onClick={(e) => e.stopPropagation()}>Cancelar</AlertDialogCancel>
-                                                                <AlertDialogAction onClick={(e) => {e.stopPropagation(); handleDeleteTicket(ticket);}}>Excluir</AlertDialogAction>
+                                                                <AlertDialogAction onClick={(e) => {e.stopPropagation(); handleDeleteTicket(ticketToDelete!);}}>Excluir</AlertDialogAction>
                                                             </AlertDialogFooter>
                                                         </AlertDialogContent>
                                                      </AlertDialog>
@@ -496,3 +585,5 @@ export default function SupportContent({ userProfile, serviceRequest, onServiceR
         </Card>
     );
 }
+
+    
