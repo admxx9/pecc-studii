@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
@@ -836,3 +837,5 @@ TERMOS: O CONTRATANTE declara estar ciente e de acordo com os termos de serviço
         </Card>
     );
 }
+
+    
