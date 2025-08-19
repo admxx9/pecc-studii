@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Send, UserCircle, MessageSquareReply, X, Trash2, Copy, MoreHorizontal, ChevronLeft, LifeBuoy, Ticket, Loader2, MessageSquarePlus, Search, ShoppingCart, Hammer, Trash, FileText, CheckCircle, XCircle } from 'lucide-react';
+import { Send, UserCircle, MessageSquareReply, X, Trash2, Copy, MoreHorizontal, ChevronLeft, LifeBuoy, Ticket, Loader2, MessageSquarePlus, Search, ShoppingCart, Hammer, Trash, FileText, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -33,7 +33,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import type { UserProfile } from '@/components/page/home-client-page';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, Timestamp, doc, deleteDoc, updateDoc, arrayUnion, arrayRemove, getDocs, where, or, writeBatch } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, Timestamp, doc, deleteDoc, updateDoc, arrayUnion, arrayRemove, getDocs, where, or, writeBatch, getDoc } from 'firebase/firestore';
 import { useToast } from "@/hooks/use-toast";
 import { ranks, rankIcons } from '@/config/ranks';
 import { Label } from '../ui/label';
@@ -50,6 +50,8 @@ interface SupportTicket {
   createdAt: Timestamp;
   lastMessage?: string;
   lastMessageAt?: Timestamp;
+  relatedContractId?: string; // For cancellation tickets
+  relatedTicketId?: string; // For cancellation tickets
 }
 
 interface ChatMessage {
@@ -304,11 +306,21 @@ Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrat
                     return;
                 }
             } else if (newMessage.startsWith('/cancelar')) {
-                 const originalContractMessage = messages.find(m => m.isContract);
-                 if (!originalContractMessage) {
-                     toast({ title: "Comando Inválido", description: "Nenhum contrato encontrado neste ticket para cancelar.", variant: "destructive" });
-                     return;
-                 }
+                 // Check if the current ticket is a cancellation request ticket
+                if (!activeTicket.relatedContractId || !activeTicket.relatedTicketId) {
+                    toast({ title: "Comando Inválido", description: "Este comando só pode ser usado em um ticket de solicitação de cancelamento.", variant: "destructive" });
+                    return;
+                }
+
+                // Fetch the original contract message to confirm it exists
+                const originalContractMessageRef = doc(db, 'supportTickets', activeTicket.relatedTicketId, 'messages', activeTicket.relatedContractId);
+                const originalContractSnap = await getDoc(originalContractMessageRef);
+
+                if (!originalContractSnap.exists()) {
+                    toast({ title: "Erro Interno", description: "O contrato original associado a este ticket não foi encontrado.", variant: "destructive" });
+                    return;
+                }
+
                 const cancellationText = `O administrador iniciou o processo de cancelamento do contrato associado a este ticket. Para confirmar o cancelamento, por favor, clique no botão abaixo.`;
                 await addDoc(collection(db, 'supportTickets', activeTicket.id, 'messages'), {
                     text: cancellationText,
@@ -316,8 +328,8 @@ Ao clicar em "Confirmar e Assinar", o CONTRATANTE aceita os termos deste contrat
                     createdAt: serverTimestamp(),
                     isCancellation: true,
                     cancellationData: {
-                        originalTicketId: activeTicket.id,
-                        originalContractId: originalContractMessage.id,
+                        originalTicketId: activeTicket.relatedTicketId,
+                        originalContractId: activeTicket.relatedContractId,
                     },
                     cancellationStatus: 'pending',
                 });
