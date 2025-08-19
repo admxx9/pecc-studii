@@ -210,7 +210,7 @@ export default function ProfilePage() {
             const textLines = pdf.splitTextToSize(contract.text, 180); // 180mm width
             pdf.text(textLines, 15, 40);
 
-            let finalY = pdf.getLastAutoTable().finalY || 50 + (textLines.length * 5); // estimate final y
+            let finalY = 50 + (textLines.length * 5); // Simple estimation of text height
             if (finalY > 280) finalY = 280; // Make sure it's on the page
 
             // Add footer info
