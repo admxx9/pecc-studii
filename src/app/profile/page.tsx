@@ -199,11 +199,20 @@ export default function ProfilePage() {
         toast({ title: "Gerando PDF...", description: "Por favor, aguarde.", variant: "default" });
 
         try {
+            // Ensure images inside the element are loaded before capturing
+            const images = Array.from(contractElement.getElementsByTagName('img'));
+            await Promise.all(images.map(img => {
+                if (img.complete) return Promise.resolve();
+                return new Promise(resolve => { img.onload = resolve; });
+            }));
+
             const canvas = await html2canvas(contractElement, {
                 scale: 2, // Increase scale for better resolution
                 backgroundColor: '#0f0f1a', // Match the dark theme background
                 useCORS: true, // For images from other origins
+                logging: false,
             });
+
             const imgData = canvas.toDataURL('image/png');
             const pdf = new jsPDF('p', 'mm', 'a4');
             const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -423,7 +432,12 @@ export default function ProfilePage() {
                                                 {/* Hidden div for PDF generation */}
                                                 <div ref={el => contractRefs.current[contract.id] = el} className="pdf-content hidden">
                                                     <div className="p-8 bg-[#0f0f1a] text-gray-200 font-sans">
-                                                        <img src="https://i.imgur.com/sXliRZl.png" alt="Logo" className="w-24 h-24 mx-auto mb-4" />
+                                                         <img 
+                                                             src="https://media.discordapp.net/attachments/1165297478489342095/1360499211107565770/1744438683192.png?ex=681ba3e0&is=681a5260&hm=6a5bee1b15e35dab8ebed6b44a0f479541f3684d306120ddf6b6f40c3bfb535a&=&format=webp&quality=lossless&width=673&height=673"
+                                                             alt="Logo"
+                                                             className="w-24 h-24 mx-auto mb-4" 
+                                                             crossOrigin="anonymous" // Add crossorigin attribute
+                                                         />
                                                         <h1 className="text-2xl font-bold text-center mb-6 text-white">Contrato de Serviço</h1>
                                                         <pre className="whitespace-pre-wrap text-sm leading-relaxed">{contract.text}</pre>
                                                         <div className="mt-8 pt-4 border-t border-gray-600 text-xs text-gray-400">
